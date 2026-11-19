@@ -1125,7 +1125,7 @@ form.inline { display: inline; }
 .keybox-row { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
 .keybox-row code { flex: 1; min-width: 0; font: 13px/1.5 var(--mono); padding: 10px 12px; background: var(--bg-2); border: 1px solid var(--line-2);
   color: var(--lime-2); overflow-wrap: anywhere; user-select: all; }
-.gw-form { display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr; gap: 14px; }
+.gw-form { display: grid; grid-template-columns: 1.5fr 1fr 1.1fr 1fr 1fr; gap: 14px; }
 .gw-form input { width: 100%; }
 .gw-steps { margin: 0 0 14px; padding-left: 20px; color: var(--text-2); font-size: 13.5px; line-height: 1.9; }
 .gw-table td { vertical-align: top; }
@@ -1143,3 +1143,7 @@ form.inline { display: inline; }
 .dm-nolink { margin: 0 0 12px; padding: 9px 12px; font-size: 12.5px; line-height: 1.7; color: var(--text-2);
   background: var(--panel-2); border-left: 2px solid var(--amber); }
 .dm-nolink[hidden] { display: none; }
+
+.price-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; padding: 10px 14px; font-size: 13px;
+  color: var(--text-2); background: var(--panel); border: 1px solid var(--line); }
+.price-bar input.mono { width: 80px; flex: none; height: 28px; padding: 0 8px; }

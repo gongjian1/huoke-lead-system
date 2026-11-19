@@ -30,6 +30,8 @@ DEFAULT_SETTINGS = {
     "price_track": "20",
     # 自定义金额充值时，1 元 = 多少条评论额度
     "comments_per_yuan": "100",
+    # 给别人发接口 Key 的批发价：每 1000 条评论多少钱（后台「接口 Key」页用来「金额 ⇄ 条数」自动换算）
+    "gateway_price_per_k": "10",
     # AI 仿写用的是客户自己的阿里云 Key（填在各自的「我的账户」里），这里只放默认模型名。
     "ai_text_model": "qwen-plus",
     "ai_image_model": "qwen-image-2.0",

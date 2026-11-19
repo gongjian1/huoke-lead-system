@@ -1318,7 +1318,13 @@ def admin_gateway():
     if request.method == "POST":
         action, f = request.form.get("action"), request.form
         try:
-            if action == "create":
+            if action == "price":
+                v = float(f.get("price", ""))
+                if not 0.1 <= v <= 10000:
+                    raise ValueError
+                set_setting("gateway_price_per_k", f"{v:g}")
+                flash(f"批发价已改为每 1000 条评论 ¥{v:g}", "ok")
+            elif action == "create":
                 unlimited = f.get("unlimited") == "on"
                 quota = None if unlimited else _int_or_none(f.get("quota"), 1, 100_000_000)
                 if not unlimited and quota is None:
@@ -1343,13 +1349,14 @@ def admin_gateway():
                 else:
                     flash(err or (d or {}).get("message") or "操作失败", "err")
         except ValueError:
-            flash("评论条数、天数要填 1 以上的整数", "err")
+            flash("批发价要填 0.1 到 10000 之间的数" if action == "price" else "评论条数、天数要填 1 以上的整数", "err")
         if not new_key:
             return redirect(url_for("admin_gateway"))
     data, err = _gw("GET", "/_admin/keys")
     return render_template("admin_gateway.html", keys=(data or {}).get("keys", []), err=err, new_key=new_key,
                            upstream_ok=bool((data or {}).get("upstream_key_set")),
-                           public_url=request.host_url.rstrip("/") + "/gw", now=int(time.time()))
+                           public_url=request.host_url.rstrip("/") + "/gw", now=int(time.time()),
+                           price_k=get_setting("gateway_price_per_k") or "10")
 
 
 # ---------------- 充值 ----------------

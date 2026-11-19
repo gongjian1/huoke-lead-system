@@ -48,6 +48,14 @@
 <div class="flash err">网关还没有配置你的 TikHub 真 Key，发出去的子 Key 现在调不通。请在网关的环境文件里设置 <span class="mono">TIKHUB_API_KEY</span>。</div>
 {% endif %}
 
+<form method="post" class="price-bar">
+  <input type="hidden" name="action" value="price">
+  <span>批发价：每 1000 条评论 ¥</span>
+  <input name="price" id="gwPrice" class="mono" value="{{ price_k }}" inputmode="decimal" size="5" aria-label="每 1000 条评论的批发价（元）">
+  <button class="btn-sm">保存</button>
+  <span class="muted">下面发 Key 时，填收款金额会自动算出评论条数</span>
+</form>
+
 <form method="post" class="panel">
   <input type="hidden" name="action" value="create">
   <div class="panel-head"><div class="panel-title">{{ icon('plus') }}发一个新的子 Key <span class="code">CREATE</span></div></div>
@@ -55,6 +63,8 @@
     <div class="gw-form">
       <label class="adv-label">给谁用 <small class="muted">备注，方便你自己认</small>
         <input name="note" maxlength="60" placeholder="例如：张三 / 长沙某公司" autocomplete="off"></label>
+      <label class="adv-label">收款金额（元） <small class="muted">和右边条数互相换算</small>
+        <input id="gwYuan" class="mono" inputmode="decimal" placeholder="例如 50" autocomplete="off"></label>
       <label class="adv-label">可用评论条数 <small class="muted">取到数据才扣</small>
         <input name="quota" class="mono" inputmode="numeric" placeholder="例如 5000" value="5000" autocomplete="off" id="gwQuota"></label>
       <label class="adv-label">有效天数 <small class="muted">不填 = 不过期</small>
@@ -120,7 +130,16 @@
 {% block scripts %}
 <script>
 const q = document.getElementById('gwQuota'), u = document.getElementById('gwUnlimited');
-if (u) u.onchange = () => { q.disabled = u.checked; };
+const y = document.getElementById('gwYuan'), pr = document.getElementById('gwPrice');
+const perK = () => parseFloat(pr && pr.value) || 10;
+if (y && q) {
+  const fromQuota = () => { const n = parseFloat(q.value); y.value = n > 0 ? +(n / 1000 * perK()).toFixed(2) : ''; };
+  const fromYuan = () => { const m = parseFloat(y.value); q.value = m > 0 ? Math.round(m / perK() * 1000) : ''; };
+  q.addEventListener('input', fromQuota); y.addEventListener('input', fromYuan);
+  if (pr) pr.addEventListener('input', fromQuota);
+  fromQuota();
+}
+if (u) u.onchange = () => { q.disabled = u.checked; if (y) y.disabled = u.checked; };
 document.querySelectorAll('[data-copy-text]').forEach(b => b.onclick = async () => {
   const text = document.getElementById(b.dataset.copyText).textContent.trim();
   try { await navigator.clipboard.writeText(text); }
