@@ -48,36 +48,26 @@ def main():
         print(f"已创建 #{kid}（{a.note or '无备注'}）")
         print(f"子 Key（只显示这一次，请马上复制给对方）：\n\n  {key}\n")
     elif a.cmd == "list":
-        with gw.conn() as db:
-            rows = db.execute("SELECT * FROM keys ORDER BY id").fetchall()
+        rows = gw.list_keys()[::-1]
         print(f"{'ID':>3}  {'前缀':<11} {'状态':<4} {'已用/额度':<14} {'限速/分':>6}  {'到期':<10} {'最近使用':<10} 备注")
         for r in rows:
             quota = "不限" if r["quota"] is None else r["quota"]
-            print(f"{r['id']:>3}  {r['prefix']:<11} {'启用' if r['enabled'] else '停用':<4} "
-                  f"{str(r['used']) + '/' + str(quota):<14} {r['rate_per_min']:>6}  {fmt_ts(r['expires_at']):<10} "
-                  f"{fmt_ts(r['last_used_at']):<10} {r['note']}")
+            state = "过期" if r["expired"] else ("启用" if r["enabled"] else "停用")
+            print(f"{r['id']:>3}  {r['prefix']:<11} {state:<4} {str(r['used']) + '/' + str(quota):<14} "
+                  f"{r['rate_per_min']:>6}  {fmt_ts(r['expires_at']):<10} {fmt_ts(r['last_used_at']):<10} {r['note']}")
         if not rows:
             print("（还没有子 Key）")
     elif a.cmd in ("disable", "enable"):
-        with gw.conn() as db:
-            n = db.execute("UPDATE keys SET enabled=? WHERE id=?", (1 if a.cmd == "enable" else 0, a.id)).rowcount
-        print("已" + ("启用" if a.cmd == "enable" else "停用") if n else "没有这个 ID")
+        ok = gw.set_enabled(a.id, a.cmd == "enable")
+        print(("已启用" if a.cmd == "enable" else "已停用") if ok else "没有这个 ID")
     elif a.cmd == "delete":
-        with gw.conn() as db:
-            n = db.execute("DELETE FROM keys WHERE id=?", (a.id,)).rowcount
-            db.execute("DELETE FROM usage_log WHERE key_id=?", (a.id,))
-        print("已删除" if n else "没有这个 ID")
+        print("已删除" if gw.delete_key(a.id) else "没有这个 ID")
     elif a.cmd == "topup":
-        with gw.conn() as db:
-            n = db.execute("UPDATE keys SET quota = quota + ? WHERE id=? AND quota IS NOT NULL", (a.n, a.id)).rowcount
-        print(f"已加 {a.n} 次" if n else "没有这个 ID，或者它本来就是不限次数")
+        print(f"已加 {a.n} 次" if gw.topup(a.id, a.n) else "没有这个 ID，或者它本来就是不限次数")
     elif a.cmd == "usage":
-        since = int(time.time()) - a.days * 86400
-        with gw.conn() as db:
-            rows = db.execute("SELECT path, COUNT(*) n, SUM(status BETWEEN 200 AND 299) ok, AVG(ms) ms FROM usage_log "
-                              "WHERE key_id=? AND ts>=? GROUP BY path ORDER BY n DESC", (a.id, since)).fetchall()
+        rows = gw.usage_summary(a.id, a.days)
         for r in rows:
-            print(f"{r['n']:>6} 次（成功 {r['ok']}）平均 {int(r['ms'])}ms  {r['path']}")
+            print(f"{r['n']:>6} 次（成功 {r['ok']}）平均 {r['ms']}ms  {r['path']}")
         if not rows:
             print(f"最近 {a.days} 天没有调用")
     else:

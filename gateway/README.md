@@ -48,6 +48,7 @@ WantedBy=multi-user.target
 然后用 nginx / OpenResty / 1Panel 把一个域名（或路径）反向代理到 `127.0.0.1:5002`，并**务必开 HTTPS**——子 Key 在请求头里传输。例如：
 
 ```nginx
+location /gw/_admin/ { return 404; }   # 管理接口不对公网开放
 location /gw/ {
     proxy_pass http://127.0.0.1:5002/;
     proxy_read_timeout 60;
@@ -58,6 +59,23 @@ location /gw/ {
 检查：`curl https://你的域名/gw/healthz` 应返回 `{"ok":true,"upstream_key_set":true}`。
 
 ## 管理子 Key
+
+### 在获客系统的管理后台里管理（推荐）
+
+管理后台 → **接口 Key**：填备注、次数、有效天数，点「生成子 Key」，复制 Key 和接口地址发给对方；列表里可以加次数、续期、停用、删除，能看到剩余额度和近 7 天用量。
+
+要打开这个页面，需要让获客系统能访问网关的管理接口：在**网关和获客系统各自的环境文件里写同一个令牌**，然后重启两个服务。
+
+```bash
+# 生成一个随机令牌
+python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+# 把同一行 GATEWAY_ADMIN_TOKEN=... 分别加进 /etc/huoke-gateway.env 和 /etc/huoke.env
+systemctl restart huoke huoke-gateway
+```
+
+管理接口只接受本机直连：网关会拒绝任何经过反向代理（带 `X-Forwarded-For`）的请求，再加上令牌，公网上访问不到。建议在反代里也把 `/gw/_admin/` 直接 `return 404`。
+
+### 或者用命令行
 
 在网关服务器上（和网关用同一个 `GATEWAY_DB`，默认是 `gateway/gateway.db`）：
 

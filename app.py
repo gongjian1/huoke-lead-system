@@ -85,6 +85,7 @@ def qs(**override):
     return "?" + urllib.parse.urlencode(args) if args else "?"
 
 
+app.jinja_env.filters["datefmt"] = lambda ts: time.strftime("%Y-%m-%d", time.localtime(ts)) if ts else "—"
 app.jinja_env.globals.update(icon=icon, logo=logo, pts=billing.fmt, wan=wan, ago=ago, imgp=imgp, qs=qs,
                              REGION_GROUPS=GROUPS, PROVINCES=PROVINCES, OVERSEAS=OVERSEAS)
 init_db()
@@ -1273,6 +1274,81 @@ def admin_settings():
                            exclude=get_setting("intent_exclude"), price_post=get_setting("price_post"),
                            price_post_wechat=get_setting("price_post_wechat"), price_track=get_setting("price_track"),
                            register_mode=get_setting("register_mode"), register_bonus=get_setting("register_bonus"))
+
+
+# ---------------- 接口 Key（数据接口中转网关）----------------
+
+GATEWAY_URL = os.environ.get("GATEWAY_URL", "http://127.0.0.1:5002").rstrip("/")
+GATEWAY_TOKEN = os.environ.get("GATEWAY_ADMIN_TOKEN", "")
+
+
+def _gw(method, path, body=None):
+    """调用本机网关的管理接口，返回 (数据 dict, 错误信息)。"""
+    if not GATEWAY_TOKEN:
+        return None, "not_configured"
+    req = urllib.request.Request(
+        GATEWAY_URL + path, method=method, data=json.dumps(body).encode() if body is not None else None,
+        headers={"X-Admin-Token": GATEWAY_TOKEN, "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=8) as r:
+            return json.loads(r.read().decode("utf-8")), ""
+    except urllib.error.HTTPError as e:
+        try:
+            return None, json.loads(e.read().decode("utf-8")).get("message") or f"网关返回 {e.code}"
+        except ValueError:
+            return None, f"网关返回 {e.code}"
+    except (urllib.error.URLError, OSError, ValueError):
+        return None, "unreachable"
+
+
+def _int_or_none(v, lo, hi):
+    v = (v or "").strip()
+    if not v:
+        return None
+    if not v.isdigit() or not lo <= int(v) <= hi:
+        raise ValueError
+    return int(v)
+
+
+@app.route("/admin/gateway", methods=["GET", "POST"])
+@admin_required
+def admin_gateway():
+    new_key = None
+    if request.method == "POST":
+        action, f = request.form.get("action"), request.form
+        try:
+            if action == "create":
+                unlimited = f.get("unlimited") == "on"
+                quota = None if unlimited else _int_or_none(f.get("quota"), 1, 100_000_000)
+                if not unlimited and quota is None:
+                    raise ValueError
+                body = {"note": f.get("note", "").strip()[:60], "quota": quota,
+                        "days": _int_or_none(f.get("days"), 1, 3650), "rate": _int_or_none(f.get("rate"), 1, 6000) or 120}
+                d, err = _gw("POST", "/_admin/keys", body)
+                if d and d.get("ok"):
+                    new_key = {"key": d["key"], "id": d["id"], "note": body["note"], "quota": quota, "days": body["days"]}
+                else:
+                    flash(err or (d or {}).get("message") or "创建失败", "err")
+            elif action in ("enable", "disable", "delete", "topup", "extend"):
+                kid = int(f.get("id", 0))
+                body = None
+                if action == "topup":
+                    body = {"n": _int_or_none(f.get("n"), 1, 100_000_000)}
+                elif action == "extend":
+                    body = {"days": _int_or_none(f.get("n"), 1, 3650)}
+                d, err = _gw("POST", f"/_admin/keys/{kid}/{action}", body or {})
+                if d and d.get("ok"):
+                    flash({"enable": "已启用", "disable": "已停用", "delete": "已删除", "topup": "已加次数", "extend": "已续期"}[action], "ok")
+                else:
+                    flash(err or (d or {}).get("message") or "操作失败", "err")
+        except ValueError:
+            flash("次数、天数要填 1 以上的整数", "err")
+        if not new_key:
+            return redirect(url_for("admin_gateway"))
+    data, err = _gw("GET", "/_admin/keys")
+    return render_template("admin_gateway.html", keys=(data or {}).get("keys", []), err=err, new_key=new_key,
+                           upstream_ok=bool((data or {}).get("upstream_key_set")),
+                           public_url=request.host_url.rstrip("/") + "/gw", now=int(time.time()))
 
 
 # ---------------- 充值 ----------------

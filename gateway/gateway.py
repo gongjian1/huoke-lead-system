@@ -30,6 +30,7 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.environ.get("GATEWAY_DB", os.path.join(BASE, "gateway.db"))
 UPSTREAM = os.environ.get("GATEWAY_UPSTREAM", "https://api.tikhub.io").rstrip("/")
 UPSTREAM_KEY = os.environ.get("TIKHUB_API_KEY", "")
+ADMIN_TOKEN = os.environ.get("GATEWAY_ADMIN_TOKEN", "")   # 管理接口的令牌；不设置 = 管理接口关闭
 TIMEOUT = 45
 MAX_BODY = 64 * 1024
 MAX_CONCURRENT = 12          # 同时在等上游的请求数，防止线程被占满
@@ -107,6 +108,56 @@ def new_key(note="", quota=None, days=None, rate=DEFAULT_RATE):
             "INSERT INTO keys (prefix, key_hash, note, quota, rate_per_min, expires_at, created_at) VALUES (?,?,?,?,?,?,?)",
             (key[:10], hash_key(key), note, quota, rate, now + days * 86400 if days else None, now))
         return cur.lastrowid, key
+
+
+def list_keys():
+    with _db_lock, conn() as c:
+        rows = c.execute("SELECT * FROM keys ORDER BY id DESC").fetchall()
+        week = int(time.time()) - 7 * 86400
+        recent = dict(c.execute("SELECT key_id, COUNT(*) FROM usage_log WHERE ts >= ? AND status BETWEEN 200 AND 299 "
+                                "GROUP BY key_id", (week,)).fetchall())
+    now = time.time()
+    return [{
+        "id": r["id"], "prefix": r["prefix"], "note": r["note"], "quota": r["quota"], "used": r["used"],
+        "left": None if r["quota"] is None else max(r["quota"] - r["used"], 0),
+        "rate_per_min": r["rate_per_min"], "enabled": bool(r["enabled"]), "expires_at": r["expires_at"],
+        "expired": bool(r["expires_at"] and r["expires_at"] <= now), "created_at": r["created_at"],
+        "last_used_at": r["last_used_at"], "week_calls": recent.get(r["id"], 0),
+    } for r in rows]
+
+
+def set_enabled(key_id, enabled):
+    with _db_lock, conn() as c:
+        return c.execute("UPDATE keys SET enabled=? WHERE id=?", (1 if enabled else 0, key_id)).rowcount == 1
+
+
+def topup(key_id, n):
+    with _db_lock, conn() as c:
+        return c.execute("UPDATE keys SET quota = quota + ? WHERE id=? AND quota IS NOT NULL", (n, key_id)).rowcount == 1
+
+
+def extend(key_id, days):
+    """到期时间往后延 days 天（已过期的从现在算起；不过期的 Key 不动）。"""
+    now = int(time.time())
+    with _db_lock, conn() as c:
+        return c.execute("UPDATE keys SET expires_at = MAX(expires_at, ?) + ? WHERE id=? AND expires_at IS NOT NULL",
+                         (now, days * 86400, key_id)).rowcount == 1
+
+
+def delete_key(key_id):
+    with _db_lock, conn() as c:
+        n = c.execute("DELETE FROM keys WHERE id=?", (key_id,)).rowcount
+        c.execute("DELETE FROM usage_log WHERE key_id=?", (key_id,))
+    _hits.pop(key_id, None)
+    return n == 1
+
+
+def usage_summary(key_id, days=7):
+    since = int(time.time()) - days * 86400
+    with _db_lock, conn() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT path, COUNT(*) n, SUM(status BETWEEN 200 AND 299) ok, CAST(AVG(ms) AS INTEGER) ms FROM usage_log "
+            "WHERE key_id=? AND ts>=? GROUP BY path ORDER BY n DESC", (key_id, since)).fetchall()]
 
 
 def _err(status, message):
@@ -243,6 +294,64 @@ def create_app():
                 return _err(502, "上游数据服务没有响应，请稍后再试")
         _log(row["id"], path, status, started)
         return Response(payload, status=status, content_type=ctype)
+
+    # ---- 管理接口：给获客系统的「管理后台」调用（令牌鉴权，且不允许从公网反代进来）----
+    def _admin_ok():
+        if not ADMIN_TOKEN:
+            return False
+        if request.headers.get("X-Forwarded-For") or request.headers.get("X-Real-IP"):
+            return False   # 经过反向代理 = 来自公网，管理接口只接受本机直连
+        return secrets.compare_digest(request.headers.get("X-Admin-Token", "").encode(), ADMIN_TOKEN.encode())
+
+    @app.before_request
+    def _guard_admin():
+        if request.path.startswith("/_admin/") and not _admin_ok():
+            return _err(404, "not found")
+
+    @app.get("/_admin/keys")
+    def admin_list():
+        return jsonify(ok=True, keys=list_keys(), upstream_key_set=bool(UPSTREAM_KEY))
+
+    @app.post("/_admin/keys")
+    def admin_create():
+        d = request.get_json(silent=True) or {}
+        quota = d.get("quota")
+        days = d.get("days")
+        rate = d.get("rate") or DEFAULT_RATE
+        note = str(d.get("note") or "").strip()[:60]
+        if quota is not None and not (isinstance(quota, int) and 0 < quota <= 100_000_000):
+            return jsonify(ok=False, message="次数要是 1 以上的整数"), 400
+        if days is not None and not (isinstance(days, int) and 0 < days <= 3650):
+            return jsonify(ok=False, message="有效天数要是 1～3650"), 400
+        if not (isinstance(rate, int) and 1 <= rate <= 6000):
+            return jsonify(ok=False, message="限速要是 1～6000 次/分钟"), 400
+        kid, key = new_key(note, quota, days, rate)
+        return jsonify(ok=True, id=kid, key=key)
+
+    @app.post("/_admin/keys/<int:kid>/<action>")
+    def admin_action(kid, action):
+        d = request.get_json(silent=True) or {}
+        if action in ("enable", "disable"):
+            ok = set_enabled(kid, action == "enable")
+        elif action == "delete":
+            ok = delete_key(kid)
+        elif action == "topup":
+            n = d.get("n")
+            if not (isinstance(n, int) and 0 < n <= 100_000_000):
+                return jsonify(ok=False, message="次数要是 1 以上的整数"), 400
+            ok = topup(kid, n)
+        elif action == "extend":
+            n = d.get("days")
+            if not (isinstance(n, int) and 0 < n <= 3650):
+                return jsonify(ok=False, message="天数要是 1～3650"), 400
+            ok = extend(kid, n)
+        else:
+            return jsonify(ok=False, message="未知操作"), 400
+        return jsonify(ok=ok, message="" if ok else "没有这个 Key，或这个操作不适用（比如不限次数的 Key 不能加次数）")
+
+    @app.get("/_admin/keys/<int:kid>/usage")
+    def admin_usage(kid):
+        return jsonify(ok=True, usage=usage_summary(kid, min(request.args.get("days", 7, type=int), 30)))
 
     @app.errorhandler(413)
     def too_big(_):

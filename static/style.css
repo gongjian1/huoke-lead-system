@@ -1119,3 +1119,23 @@ form.inline { display: inline; }
   .lead-table .td-dm .btn-sm { width: 100%; justify-content: center; height: 38px; }
   .dm-dlg { max-height: calc(100vh - 16px); }
 }
+
+/* ---- 管理后台：接口 Key ---- */
+.keybox { border-color: var(--lime-line); }
+.keybox-row { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+.keybox-row code { flex: 1; min-width: 0; font: 13px/1.5 var(--mono); padding: 10px 12px; background: var(--bg-2); border: 1px solid var(--line-2);
+  color: var(--lime-2); overflow-wrap: anywhere; user-select: all; }
+.gw-form { display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr; gap: 14px; }
+.gw-form input { width: 100%; }
+.gw-steps { margin: 0 0 14px; padding-left: 20px; color: var(--text-2); font-size: 13.5px; line-height: 1.9; }
+.gw-table td { vertical-align: top; }
+.gw-table .bar { min-width: 90px; }
+.gw-act .mini-form { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+.gw-act .pair { display: flex; gap: 6px; align-items: center; margin: 0; }
+.gw-act .pair input[name=n] { width: 72px; height: 28px; padding: 0 8px; }
+@media (max-width: 900px) {
+  .gw-form { grid-template-columns: 1fr 1fr; }
+  .keybox-row { flex-direction: column; align-items: stretch; }
+  .gw-act .mini-form { align-items: flex-start; }
+}
+@media (max-width: 560px) { .gw-form { grid-template-columns: 1fr; } }
