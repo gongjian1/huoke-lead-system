@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}系统设置 - 获客系统{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div>
+    <div class="kicker">Admin / Settings</div>
+    <h1>管理后台</h1>
+  </div>
+</header>
+{% include "_admin_tabs.html" %}
+
+<form method="post">
+  <div class="grid-main" style="margin-bottom:18px">
+    <section class="panel" style="margin-bottom:0">
+      <div class="panel-head">
+        <div class="panel-title">{{ icon('coin') }}收费标准 <span class="code">PRICING</span></div>
+        <span class="panel-meta">1 积分 = 1 元</span>
+      </div>
+      <div class="panel-body">
+        <p class="panel-note">每个作品按实际抓到的评论数收费，每 50 条评论为一档，不足 50 条按一档算。管理员自己采集不扣积分。</p>
+        <div class="grid-2-even" style="margin-bottom:16px">
+          <label class="adv-label">普通平台 · 每档积分<input name="price_post" id="pNormal" class="mono" value="{{ price_post }}" inputmode="decimal"></label>
+          <label class="adv-label">视频号 / 公众号 · 每档积分<input name="price_post_wechat" id="pWechat" class="mono" value="{{ price_post_wechat }}" inputmode="decimal"></label>
+        </div>
+        <label class="adv-label" style="margin-bottom:16px">对标账号 · 每次刷新积分 <small class="muted">每 12 小时刷新一次 = 每天 2 次</small>
+          <input name="price_track" id="pTrack" class="mono" value="{{ price_track }}" inputmode="decimal"></label>
+        <div class="estimate" id="priceDemo"></div>
+        <p class="panel-note" style="margin:0">参考成本（TikHub 接口费）：普通平台每档约 ¥0.09，微信平台每档约 ¥0.35，对标账号每次刷新约 ¥0.04。</p>
+      </div>
+    </section>
+
+    <section class="panel" style="margin-bottom:0">
+      <div class="panel-head"><div class="panel-title">{{ icon('user-plus') }}用户注册 <span class="code">SIGN-UP</span></div></div>
+      <div class="panel-body">
+        <div class="field">
+          <div class="field-label">注册方式</div>
+          <div class="seg seg-col">
+            {% for v, label, hint in [('approval', '需要审核', '用户注册后，你在后台点"通过"才能登录'),
+                                      ('open', '开放注册', '注册完直接能登录，没积分也用不了采集'),
+                                      ('closed', '关闭注册', '登录页不显示注册入口，只能你手动开通')] %}
+            <label class="seg-item"><input type="radio" name="register_mode" value="{{ v }}" {{ 'checked' if register_mode == v }}>
+              <span><b>{{ label }}</b><small>{{ hint }}</small></span></label>
+            {% endfor %}
+          </div>
+        </div>
+        <label class="adv-label">注册赠送积分 <small class="muted">给新用户试用，0 表示不送</small>
+          <input name="register_bonus" class="mono" value="{{ register_bonus }}" inputmode="decimal"></label>
+      </div>
+    </section>
+  </div>
+
+  <section class="panel" style="margin-bottom:18px">
+    <div class="panel-head">
+      <div class="panel-title">{{ icon('spark') }}AI 创作 · 默认模型 <span class="code">AI STUDIO</span></div>
+    </div>
+    <div class="panel-body">
+      <p class="panel-note">AI 仿写用的是<b>每个客户自己的阿里云 Key</b>（客户在「我的账户」里填），费用由阿里云向客户收取，不扣积分、不需要你配置 Key。这里只设「客户没单独选模型时用哪个」。</p>
+      <div class="grid-2-even">
+        <label class="adv-label">默认文案模型
+          <input name="ai_text_model" class="mono" value="{{ ai_text_model }}" list="textModels" autocomplete="off">
+          <datalist id="textModels"><option value="qwen-plus"><option value="qwen3.7-plus"><option value="qwen3.8-flash"><option value="qwen-max"></datalist></label>
+        <label class="adv-label">默认配图模型
+          <input name="ai_image_model" class="mono" value="{{ ai_image_model }}" list="imageModels" autocomplete="off">
+          <datalist id="imageModels"><option value="qwen-image-2.0"><option value="qwen-image-2.0-pro"><option value="qwen-image-3.0"><option value="wan2.7-image"></datalist></label>
+      </div>
+      <div class="grid-2-even" style="margin-top:14px">
+        <label class="adv-label">视频模型系列 <small class="muted">文生视频用「系列-t2v」、图生视频用「系列-i2v」，目前验证过 wan2.7</small>
+          <input name="ai_video_model" class="mono" value="{{ ai_video_model }}" autocomplete="off"></label>
+        <div></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="grid-3" style="margin-bottom:18px">
+    {% for name, title, code, cls, val in [
+        ('intent_strong', 'A 级 · 强意向', 'STRONG', 'is-a', strong),
+        ('intent_medium', 'B 级 · 中意向', 'MEDIUM', 'is-b', medium),
+        ('intent_exclude', '排除词', 'EXCLUDE', 'is-x', exclude)] %}
+    <section class="panel wordbox {{ cls }}" style="margin-bottom:0">
+      <div class="panel-head">
+        <div class="panel-title"><span class="dot"></span>{{ title }} <span class="code">{{ code }}</span></div>
+        <span class="count" data-for="{{ name }}"></span>
+      </div>
+      <textarea name="{{ name }}" id="{{ name }}" class="mono" spellcheck="false" aria-label="{{ title }}">{{ val }}</textarea>
+    </section>
+    {% endfor %}
+  </div>
+  <p class="panel-note">意向词对所有用户生效：评论里出现这些词就会被筛成线索，一行一个。</p>
+
+  <section class="panel">
+    <div class="panel-head"><div class="panel-title">{{ icon('key') }}TikHub API Key <span class="code">API</span></div></div>
+    <div class="panel-body">
+      <p class="panel-note">当前 <span class="mono">{{ masked_key or '未设置' }}</span> · 要换就填新的，不换留空。</p>
+      <input type="text" name="api_key" class="mono" placeholder="粘贴新的 API Key" autocomplete="off" aria-label="API Key">
+    </div>
+  </section>
+
+  <div class="save-bar">
+    <button class="btn btn-primary btn-lg">{{ icon('check') }}保存设置</button>
+    <span class="muted">价格、注册方式、意向词、API Key 一起保存</span>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+
+document.querySelectorAll('.count[data-for]').forEach(c => {
+  const ta = document.getElementById(c.dataset.for);
+  const upd = () => c.textContent = ta.value.split(/[\n,，]/).map(s => s.trim()).filter(Boolean).length + ' 词';
+  ta.addEventListener('input', upd); upd();
+});
+const demo = () => {
+  const n = parseFloat(document.getElementById('pNormal').value) || 0, w = parseFloat(document.getElementById('pWechat').value) || 0;
+  const t = parseFloat(document.getElementById('pTrack').value) || 0;
+  const f = v => +v.toFixed(2);
+  document.getElementById('priceDemo').innerHTML =
+    `<span>搜 1 个关键词 × 5 个作品</span><b>${f(n * 5)}</b><span>积分（普通）</span><b>${f(w * 5)}</b><span>积分（微信）</span>` +
+    `<span class="sep"></span><span>追踪 1 个账号每月约</span><b>${f(t * 2 * 30)}</b><span>积分</span>`;
+};
+['pNormal', 'pWechat', 'pTrack'].forEach(id => document.getElementById(id).addEventListener('input', demo)); demo();
+</script>
+{% endblock %}
