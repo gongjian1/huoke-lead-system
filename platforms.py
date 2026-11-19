@@ -15,7 +15,7 @@ import re
 import time
 import urllib.parse
 
-from api import ApiError, get, post as api_post
+from api import ApiError, get, post as api_post, request as api_request
 
 _TAG = re.compile(r"<[^>]+>")
 
@@ -121,6 +121,10 @@ class Platform:
 
     def search(self, keyword, cursor=None, max_age_days=0):
         raise NotImplementedError
+
+    def share_link(self, post):
+        """搜索结果里没有作品链接的平台，可以在这里按需生成（会产生接口费用）。默认没有。"""
+        return ""
 
     def comments_page(self, post, cursor=None):
         raise NotImplementedError
@@ -499,7 +503,7 @@ class WechatChannels(Platform):
             except ValueError:
                 nonce = ""
             posts.append(P(it["exportId"], it.get("title"), (it.get("source") or {}).get("title"), None, "",
-                           export_id=it["exportId"], nonce=nonce))
+                           published=it.get("pubTime"), export_id=it["exportId"], nonce=nonce))
         return posts, (d.get("cursor") if posts and str(d.get("continue_flag")) == "1" else None)
 
     def _object_id(self, post):
@@ -523,9 +527,20 @@ class WechatChannels(Platform):
         d = api_post("/api/v1/wechat_channels/v2/fetch_video_comments", object_id=oid,
                      last_buffer=cursor or "", raw=False).get("data") or {}
         out = [C(c.get("comment_id"), c.get("nickname"), c.get("content"), c.get("username"), "", "",
-                 c.get("like_count"), c.get("reply_count"), c.get("ip_region"))
+                 c.get("like_count"), c.get("reply_count"), c.get("ip_region"), c.get("create_time"))
                for c in d.get("comments") or []]
         return out, (d.get("last_buffer") if out and d.get("down_continue") else None)
+
+    def share_link(self, post):
+        """视频号没有网页链接，只有微信里能打开的分享短链（weixin.qq.com/sph/…）。每次约 $0.01，
+        响应很慢；超时可能已经扣费，所以只请求一次，不重试。"""
+        oid = self._object_id(post)
+        if not oid:
+            return ""
+        d = api_request("POST", "/api/v1/wechat_channels/v2/fetch_video_share_url",
+                        body={"object_id": oid, "raw": False}, retries=1, timeout=40).get("data") or {}
+        url = str(d.get("share_url") or "")
+        return url if url.startswith("https://weixin.qq.com/sph/") else ""
 
     def parse_manual(self, text):
         m = re.search(r"https?://weixin\.qq\.com/sph/\w+", text)

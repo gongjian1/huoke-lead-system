@@ -15,6 +15,7 @@
       {% if l.user_link %}<a href="{{ l.user_link }}" target="_blank" rel="noopener"><strong>{{ l.nickname }}</strong></a>
       {% else %}<strong>{{ l.nickname }}</strong>{% endif %}
       {% if l.user_handle %}<span class="cell-sub uid">@{{ l.user_handle }}</span>{% endif %}
+      {% if not l.user_link and l.platform == 'wechat_channels' %}<span class="cell-sub" title="视频号不提供评论者的主页链接。点「原作品」打开视频，在评论区按昵称找到这条评论回复。">无主页链接 · 按昵称找</span>{% endif %}
       {% set region = l.province or (l.ip_region if l.ip_region and l.ip_region != '未知' else '') %}{% if region %}<span class="cell-sub">IP · {{ region }}</span>{% endif %}
     </td>
     <td class="comment-text td-text" {% if l.keywords %}data-hits="{{ l.keywords }}"{% endif %}>

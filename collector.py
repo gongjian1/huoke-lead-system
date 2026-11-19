@@ -137,6 +137,21 @@ def save_comments(conn, owner, plat, vid, comments, keyword, project, words, is_
     return new, a, b
 
 
+def _fill_link(conn, plat, post, vid):
+    """没有作品链接的平台（视频号）：只给真正产生了线索的作品补一条分享链接，省接口费。"""
+    if not conn.execute("SELECT 1 FROM leads WHERE video_id=? LIMIT 1", (vid,)).fetchone():
+        return
+    if (conn.execute("SELECT url FROM videos WHERE id=?", (vid,)).fetchone() or [""])[0]:
+        return
+    try:
+        url = plat.share_link(post)
+    except ApiError:
+        return
+    if url:
+        conn.execute("UPDATE videos SET url=? WHERE id=? AND COALESCE(url,'')=''", (url, vid))
+        conn.commit()
+
+
 def collect_post(conn, t, plat, post, keyword, project, words, billed):
     tid, owner, limit = t["id"], t["owner_id"], t["comments_per_post"]
     price = tier_price(plat.key) if billed else 0
@@ -194,6 +209,8 @@ def collect_post(conn, t, plat, post, keyword, project, words, billed):
     got = state["got"]
     if price and got:
         charge_task(conn, owner, tid, min(tiers_for(got), tiers_for(limit)) * price)
+    if got and not post.get("url"):
+        _fill_link(conn, plat, post, vid)
     return got
 
 

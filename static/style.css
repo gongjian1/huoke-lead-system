@@ -1139,3 +1139,7 @@ form.inline { display: inline; }
   .gw-act .mini-form { align-items: flex-start; }
 }
 @media (max-width: 560px) { .gw-form { grid-template-columns: 1fr; } }
+
+.dm-nolink { margin: 0 0 12px; padding: 9px 12px; font-size: 12.5px; line-height: 1.7; color: var(--text-2);
+  background: var(--panel-2); border-left: 2px solid var(--amber); }
+.dm-nolink[hidden] { display: none; }
