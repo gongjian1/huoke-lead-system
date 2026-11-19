@@ -41,7 +41,9 @@ KEY_PREFIX = "hk_"
 ALLOWED = ("douyin", "xiaohongshu", "kuaishou", "bilibili", "weibo", "zhihu", "wechat_search",
            "wechat_channels", "wechat_mp", "xigua", "toutiao", "pipixia")
 PATH_OK = re.compile(r"^/api/v1/(?:" + "|".join(ALLOWED) + r")/[A-Za-z0-9_]+(?:/[A-Za-z0-9_]+)*$")
-# 成本差别很大的接口按倍数扣次数：微信类每次请求 $0.01，是抖音等（$0.001）的 10 倍
+# 额度的单位是「条评论」。网关数的是请求，按平均每 1000 条评论约 500 次请求折算：1 次普通请求扣 2 条额度。
+# 微信类每次请求成本是抖音等的 10 倍（$0.01 对 $0.001），所以按 10 倍扣。
+UNITS_PER_REQUEST = int(os.environ.get("GATEWAY_UNITS_PER_REQUEST", "2"))
 WEIGHTS = {"wechat_search": 10, "wechat_channels": 10, "wechat_mp": 10}
 ME_PATH = "/api/v1/tikhub/user/get_user_info"   # 获客系统用它显示余额：这里改成返回该子 Key 自己的剩余次数
 
@@ -78,7 +80,7 @@ def init_db():
                 prefix       TEXT NOT NULL,
                 key_hash     TEXT NOT NULL UNIQUE,
                 note         TEXT NOT NULL DEFAULT '',
-                quota        INTEGER,                       -- 可用总次数；NULL = 不限
+                quota        INTEGER,                       -- 可用评论额度（条）；NULL = 不限
                 used         INTEGER NOT NULL DEFAULT 0,
                 rate_per_min INTEGER NOT NULL DEFAULT 120,
                 enabled      INTEGER NOT NULL DEFAULT 1,
@@ -100,9 +102,9 @@ def init_db():
 
 
 def weight_of(path):
-    """这个接口每次请求算几次（见 WEIGHTS，默认 1）。"""
+    """这个接口每次请求扣几条额度（普通请求 UNITS_PER_REQUEST 条，微信类再乘 WEIGHTS）。"""
     parts = path.split("/")
-    return WEIGHTS.get(parts[3], 1) if len(parts) > 3 else 1
+    return UNITS_PER_REQUEST * (WEIGHTS.get(parts[3], 1) if len(parts) > 3 else 1)
 
 
 def hash_key(key):
@@ -250,7 +252,7 @@ def create_app():
         if path == ME_PATH:   # 不转发到 TikHub：那是网关主人的账户信息
             left = None if row["quota"] is None else max(row["quota"] - row["used"], 0)
             return jsonify(code=200, user_data={"balance": left, "quota": row["quota"], "used": row["used"],
-                                                "unit": "calls", "expires_at": row["expires_at"]})
+                                                "unit": "comments", "expires_at": row["expires_at"]})
         if not PATH_OK.match(path):
             return _err(403, "这个接口不在允许范围内")
         if not UPSTREAM_KEY:
@@ -263,8 +265,8 @@ def create_app():
         with _db_lock, conn() as c:
             ok = _reserve(c, row["id"], w)
         if not ok:
-            more = f"（这个接口每次算 {w} 次）" if w > 1 else ""
-            return _err(402, f"额度不足{more}或 Key 已失效，请联系提供者充值")
+            more = f"（这个接口每次请求扣 {w} 条）"
+            return _err(402, f"评论额度不足{more}或 Key 已失效，请联系提供者充值")
 
         url = UPSTREAM + path
         if request.query_string:
@@ -332,7 +334,7 @@ def create_app():
         rate = d.get("rate") or DEFAULT_RATE
         note = str(d.get("note") or "").strip()[:60]
         if quota is not None and not (isinstance(quota, int) and 0 < quota <= 100_000_000):
-            return jsonify(ok=False, message="次数要是 1 以上的整数"), 400
+            return jsonify(ok=False, message="评论条数要是 1 以上的整数"), 400
         if days is not None and not (isinstance(days, int) and 0 < days <= 3650):
             return jsonify(ok=False, message="有效天数要是 1～3650"), 400
         if not (isinstance(rate, int) and 1 <= rate <= 6000):
@@ -350,7 +352,7 @@ def create_app():
         elif action == "topup":
             n = d.get("n")
             if not (isinstance(n, int) and 0 < n <= 100_000_000):
-                return jsonify(ok=False, message="次数要是 1 以上的整数"), 400
+                return jsonify(ok=False, message="评论条数要是 1 以上的整数"), 400
             ok = topup(kid, n)
         elif action == "extend":
             n = d.get("days")

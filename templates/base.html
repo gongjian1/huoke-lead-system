@@ -70,7 +70,7 @@ async function updateLead(id, field, value, el) {
 }
 {% if me.is_admin %}
 fetch('/api/balance').then(r => r.json()).then(d => {
-  document.getElementById('balance').textContent = d.balance == null ? '读取失败' : '$' + Number(d.balance).toFixed(2);
+  document.getElementById('balance').textContent = d.balance == null ? '读取失败' : (d.unit === 'comments' ? '约 ' + Number(d.balance).toLocaleString() + ' 条评论' : '$' + Number(d.balance).toFixed(2));
 }).catch(() => {});
 {% endif %}
 function refreshPoints() {

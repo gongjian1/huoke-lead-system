@@ -1339,11 +1339,11 @@ def admin_gateway():
                     body = {"days": _int_or_none(f.get("n"), 1, 3650)}
                 d, err = _gw("POST", f"/_admin/keys/{kid}/{action}", body or {})
                 if d and d.get("ok"):
-                    flash({"enable": "已启用", "disable": "已停用", "delete": "已删除", "topup": "已加次数", "extend": "已续期"}[action], "ok")
+                    flash({"enable": "已启用", "disable": "已停用", "delete": "已删除", "topup": "已加额度", "extend": "已续期"}[action], "ok")
                 else:
                     flash(err or (d or {}).get("message") or "操作失败", "err")
         except ValueError:
-            flash("次数、天数要填 1 以上的整数", "err")
+            flash("评论条数、天数要填 1 以上的整数", "err")
         if not new_key:
             return redirect(url_for("admin_gateway"))
     data, err = _gw("GET", "/_admin/keys")
@@ -1759,7 +1759,8 @@ def api_me():
 @app.get("/api/balance")
 @admin_required
 def api_balance():
-    return jsonify(balance=api.balance())
+    value, unit = api.balance_info()
+    return jsonify(balance=value, unit=unit)
 
 
 if __name__ == "__main__":

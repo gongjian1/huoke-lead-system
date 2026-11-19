@@ -54,8 +54,14 @@ def post(path, **body):
     return request("POST", path, body={k: v for k, v in body.items() if v is not None})
 
 
-def balance():
+def balance_info():
+    """(余额, 单位)。直连 TikHub 时是美元；用的是中转子 Key 时单位是 comments（条评论额度）。"""
     try:
-        return get("/api/v1/tikhub/user/get_user_info").get("user_data", {}).get("balance")
+        d = get("/api/v1/tikhub/user/get_user_info").get("user_data", {})
+        return d.get("balance"), d.get("unit") or "usd"
     except ApiError:
-        return None
+        return None, "usd"
+
+
+def balance():
+    return balance_info()[0]
