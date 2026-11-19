@@ -54,7 +54,7 @@
       <div class="field">
         <div class="field-label"><span class="step">04</span>抓取深度 <small>作品越多、评论越多，线索越全，积分也越多</small></div>
         <div class="seg depth">
-          {% for k, label, n, c in [('fast', '快速', 5, 50), ('std', '标准', 10, 100), ('deep', '深度', 20, 200)] %}
+          {% for k, label, n, c in [('fast', '快速', 5, 100), ('std', '标准', 10, 100), ('deep', '深度', 20, 200)] %}
           <label class="seg-item"><input type="radio" name="depth" value="{{ k }}" data-n="{{ n }}" data-c="{{ c }}" {{ 'checked' if loop.first }}>
             <span><b>{{ label }}</b><small>每词每平台 {{ n }} 个作品 · 每个最多 {{ c }} 条</small></span></label>
           {% endfor %}
@@ -98,7 +98,7 @@
         <div class="advanced-body">
           <div class="adv-grid">
             <label>每个词每个平台取几个作品<input type="number" id="postsPer" value="5" min="1" max="30"></label>
-            <label>每个作品最多抓几条评论<input type="number" id="commentsPer" value="50" min="10" max="500" step="10"></label>
+            <label>每个作品最多抓几条评论<input type="number" id="commentsPer" value="100" min="10" max="500" step="10"></label>
             <label>作品至少有几条评论才抓<input type="number" id="minComments" value="3" min="0"></label>
           </div>
           <label class="field-label" for="extraIntent">本次额外意向词 <small>只对这次任务生效，比如行业专属的词</small></label>

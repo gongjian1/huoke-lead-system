@@ -1594,7 +1594,7 @@ def create_task():
         owner_id=g.user["id"], mode="search", project=(d.get("project") or "默认").strip()[:40],
         keywords="\n".join(keywords), platforms=",".join(platforms),
         posts_per_keyword=_int(d.get("posts_per_keyword"), 5, 1, 30),
-        comments_per_post=_int(d.get("comments_per_post"), 50, 10, 500),
+        comments_per_post=_int(d.get("comments_per_post"), 100, 10, 500),
         min_comments=_int(d.get("min_comments"), 0, 0, 100000),
         extra_intent="\n".join(word_list(d.get("extra_intent", ""))),
         fetch_replies=1 if d.get("fetch_replies", True) else 0,
