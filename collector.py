@@ -18,6 +18,7 @@ REPLY_MIN = 3
 REPLY_PAGES_PER_THREAD = 2
 TOP_LEVEL_SHARE = 0.6
 SEARCH_PAGES = 5
+PLATFORM_FAIL_TTL = 6 * 3600   # 平台"接口异常"标记多久后视为过期
 
 
 def record_health(platform_key, ok, msg=""):
@@ -29,9 +30,18 @@ def platform_health():
     out = {}
     for key in PLATFORMS:
         try:
-            out[key] = json.loads(get_setting(f"health:{key}") or "null")
+            h = json.loads(get_setting(f"health:{key}") or "null")
         except ValueError:
-            out[key] = None
+            h = None
+        # 只在真的搜索时才会更新这条记录。"异常"超过 6 小时没复查，多半是过期信息，不再把平台标成异常
+        if h and not h.get("ok"):
+            try:
+                age = time.time() - time.mktime(time.strptime(h.get("at", ""), "%Y-%m-%d %H:%M"))
+            except ValueError:
+                age = 0
+            if age > PLATFORM_FAIL_TTL:
+                h = None
+        out[key] = h
     return out
 
 
