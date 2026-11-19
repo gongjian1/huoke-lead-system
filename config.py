@@ -40,7 +40,7 @@ DEFAULT_SETTINGS = {
     "register_mode": "approval",
     "register_bonus": "0",
     # 充值套餐：每行「付款金额（元） 到账评论条数」，用户在充值页选择；收款码图片存在 media/pay-*.png|jpg
-    "recharge_packages": "45 5000\n160 20000\n700 100000",
+    "recharge_packages": "50 5000\n100 10000\n300 30000\n1000 100000",
     "recharge_contact": "",   # 联系方式（微信号等），显示在充值页
     "recharge_note": "",      # 充值页补充说明
 }
