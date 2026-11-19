@@ -67,7 +67,7 @@ def main():
     elif a.cmd == "usage":
         rows = gw.usage_summary(a.id, a.days)
         for r in rows:
-            print(f"{r['n']:>6} 次（成功 {r['ok']}）平均 {r['ms']}ms  {r['path']}")
+            print(f"{r['n']:>6} 次请求（成功 {r['ok']}，共计 {r['cost']} 次额度）平均 {r['ms']}ms  {r['path']}")
         if not rows:
             print(f"最近 {a.days} 天没有调用")
     else:

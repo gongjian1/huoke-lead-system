@@ -41,6 +41,8 @@ KEY_PREFIX = "hk_"
 ALLOWED = ("douyin", "xiaohongshu", "kuaishou", "bilibili", "weibo", "zhihu", "wechat_search",
            "wechat_channels", "wechat_mp", "xigua", "toutiao", "pipixia")
 PATH_OK = re.compile(r"^/api/v1/(?:" + "|".join(ALLOWED) + r")/[A-Za-z0-9_]+(?:/[A-Za-z0-9_]+)*$")
+# 成本差别很大的接口按倍数扣次数：微信类每次请求 $0.01，是抖音等（$0.001）的 10 倍
+WEIGHTS = {"wechat_search": 10, "wechat_channels": 10, "wechat_mp": 10}
 ME_PATH = "/api/v1/tikhub/user/get_user_info"   # 获客系统用它显示余额：这里改成返回该子 Key 自己的剩余次数
 
 _ctx = ssl.create_default_context()
@@ -91,8 +93,16 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_usage_ts ON usage_log(ts);
             CREATE INDEX IF NOT EXISTS idx_usage_key ON usage_log(key_id, ts);
         """)
+        if "cost" not in {r[1] for r in c.execute("PRAGMA table_info(usage_log)")}:
+            c.execute("ALTER TABLE usage_log ADD COLUMN cost INTEGER NOT NULL DEFAULT 1")   # 这次请求扣了几次
         # 日志只留 30 天；只记路径，不记查询参数（里面是客户搜的关键词）
         c.execute("DELETE FROM usage_log WHERE ts < ?", (int(time.time()) - 30 * 86400,))
+
+
+def weight_of(path):
+    """这个接口每次请求算几次（见 WEIGHTS，默认 1）。"""
+    parts = path.split("/")
+    return WEIGHTS.get(parts[3], 1) if len(parts) > 3 else 1
 
 
 def hash_key(key):
@@ -114,7 +124,7 @@ def list_keys():
     with _db_lock, conn() as c:
         rows = c.execute("SELECT * FROM keys ORDER BY id DESC").fetchall()
         week = int(time.time()) - 7 * 86400
-        recent = dict(c.execute("SELECT key_id, COUNT(*) FROM usage_log WHERE ts >= ? AND status BETWEEN 200 AND 299 "
+        recent = dict(c.execute("SELECT key_id, SUM(cost) FROM usage_log WHERE ts >= ? AND status BETWEEN 200 AND 299 "
                                 "GROUP BY key_id", (week,)).fetchall())
     now = time.time()
     return [{
@@ -156,7 +166,7 @@ def usage_summary(key_id, days=7):
     since = int(time.time()) - days * 86400
     with _db_lock, conn() as c:
         return [dict(r) for r in c.execute(
-            "SELECT path, COUNT(*) n, SUM(status BETWEEN 200 AND 299) ok, CAST(AVG(ms) AS INTEGER) ms FROM usage_log "
+            "SELECT path, COUNT(*) n, SUM(cost) cost, SUM(status BETWEEN 200 AND 299) ok, CAST(AVG(ms) AS INTEGER) ms FROM usage_log "
             "WHERE key_id=? AND ts>=? GROUP BY path ORDER BY n DESC", (key_id, since)).fetchall()]
 
 
@@ -181,25 +191,25 @@ def _check_rate(key_id, limit):
         return True
 
 
-def _reserve(c, key_id):
-    """原子地占用 1 次额度；返回是否成功（并发下不会超发）。"""
+def _reserve(c, key_id, w=1):
+    """原子地占用 w 次额度；返回是否成功（并发下不会超发）。"""
     now = int(time.time())
     cur = c.execute(
-        "UPDATE keys SET used = used + 1, last_used_at = ? WHERE id = ? AND enabled = 1 "
-        "AND (quota IS NULL OR used < quota) AND (expires_at IS NULL OR expires_at > ?)", (now, key_id, now))
+        "UPDATE keys SET used = used + ?, last_used_at = ? WHERE id = ? AND enabled = 1 "
+        "AND (quota IS NULL OR used + ? <= quota) AND (expires_at IS NULL OR expires_at > ?)", (w, now, key_id, w, now))
     return cur.rowcount == 1
 
 
-def _refund(key_id):
+def _refund(key_id, w=1):
     with _db_lock, conn() as c:
-        c.execute("UPDATE keys SET used = MAX(used - 1, 0) WHERE id = ?", (key_id,))
+        c.execute("UPDATE keys SET used = MAX(used - ?, 0) WHERE id = ?", (w, key_id))
 
 
-def _log(key_id, path, status, started):
+def _log(key_id, path, status, started, cost=1):
     try:
         with _db_lock, conn() as c:
-            c.execute("INSERT INTO usage_log (ts, key_id, path, status, ms) VALUES (?,?,?,?,?)",
-                      (int(time.time()), key_id, path, status, int((time.time() - started) * 1000)))
+            c.execute("INSERT INTO usage_log (ts, key_id, path, status, ms, cost) VALUES (?,?,?,?,?,?)",
+                      (int(time.time()), key_id, path, status, int((time.time() - started) * 1000), cost))
     except sqlite3.Error:
         pass
 
@@ -249,10 +259,12 @@ def create_app():
             return _err(429, f"请求太快了（每分钟最多 {row['rate_per_min']} 次），请稍后再试")
 
         body = request.get_data() if request.method == "POST" else None   # 先读正文：超大会在这里 413，不扣次数
+        w = weight_of(path)
         with _db_lock, conn() as c:
-            ok = _reserve(c, row["id"])
+            ok = _reserve(c, row["id"], w)
         if not ok:
-            return _err(402, "额度已用完或 Key 已失效，请联系提供者充值")
+            more = f"（这个接口每次算 {w} 次）" if w > 1 else ""
+            return _err(402, f"额度不足{more}或 Key 已失效，请联系提供者充值")
 
         url = UPSTREAM + path
         if request.query_string:
@@ -264,7 +276,7 @@ def create_app():
             "Content-Type": request.headers.get("Content-Type", "application/json"),
         })
         if not _gate.acquire(timeout=10):
-            _refund(row["id"])
+            _refund(row["id"], w)
             return _err(503, "网关繁忙，请稍后再试")
         status, payload, ctype = 502, b"", "application/json"
         try:
@@ -276,7 +288,7 @@ def create_app():
             except (urllib.error.URLError, OSError, ValueError) as e:
                 print(f"[gateway] upstream error {path}: {e}", file=sys.stderr)
             except Exception:
-                _refund(row["id"])
+                _refund(row["id"], w)
                 raise
         finally:
             _gate.release()
@@ -284,15 +296,15 @@ def create_app():
         if status in (401, 402, 403):
             # 这是上游在拒绝"网关自己的 Key"（欠费 / 失效），别把细节透给使用者
             print(f"[gateway] upstream rejected our key: HTTP {status} on {path}", file=sys.stderr)
-            _refund(row["id"])
-            _log(row["id"], path, 502, started)
+            _refund(row["id"], w)
+            _log(row["id"], path, 502, started, w)
             return _err(502, "上游数据服务暂时不可用，请联系提供者")
         if not 200 <= status < 300:
-            _refund(row["id"])       # 只有成功的请求才算次数
+            _refund(row["id"], w)       # 只有成功的请求才算次数
             if not payload:
-                _log(row["id"], path, 502, started)
+                _log(row["id"], path, 502, started, w)
                 return _err(502, "上游数据服务没有响应，请稍后再试")
-        _log(row["id"], path, status, started)
+        _log(row["id"], path, status, started, w)
         return Response(payload, status=status, content_type=ctype)
 
     # ---- 管理接口：给获客系统的「管理后台」调用（令牌鉴权，且不允许从公网反代进来）----
