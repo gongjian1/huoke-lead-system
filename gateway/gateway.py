@@ -158,6 +158,16 @@ def create_app():
     app.config["MAX_CONTENT_LENGTH"] = MAX_BODY
     init_db()
 
+    @app.get("/")
+    def index():
+        return Response(
+            "<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
+            "<title>数据接口网关</title><body style='font:16px/1.7 system-ui,sans-serif;max-width:32em;margin:12vh auto;padding:0 20px'>"
+            "<h1 style='font-size:22px'>数据接口网关 · 运行正常</h1>"
+            "<p>这是获客系统的数据接口中转服务，给程序调用的，没有网页界面。</p>"
+            "<p>需要使用的话，请联系提供者获取子 Key，然后在获客系统「管理后台 → 设置」里填写 Key 和本页的地址。</p>"
+            "</body>", content_type="text/html; charset=utf-8")
+
     @app.get("/healthz")
     def healthz():
         return jsonify(ok=True, upstream_key_set=bool(UPSTREAM_KEY))
