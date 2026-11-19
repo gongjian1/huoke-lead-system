@@ -139,6 +139,17 @@ def guard():
     return redirect(url_for("login"))
 
 
+@app.after_request
+def security_headers(resp):
+    """基础安全响应头：防被嵌进别人的网页（点击劫持）、防浏览器猜文件类型、控制 Referer、HTTPS 下启用 HSTS。"""
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    resp.headers.setdefault("Referrer-Policy", "same-origin")
+    if os.environ.get("HUOKE_HTTPS") == "1":
+        resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
+    return resp
+
+
 def admin_required(fn):
     @wraps(fn)
     def wrapper(*a, **kw):
