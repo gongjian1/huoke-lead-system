@@ -1601,12 +1601,13 @@ def create_task():
         max_age_days=_age_days(d.get("max_age_days")),
         regions=",".join(_regions(d.get("regions"))),
         keep_unknown_region=1 if d.get("keep_unknown_region", True) else 0,
+        skip_seen=1 if d.get("skip_seen", True) else 0,
     )
     return jsonify(ok=True, task_id=tid)
 
 
 RERUN_FIELDS = ("mode", "project", "keywords", "platforms", "posts_per_keyword", "comments_per_post", "min_comments",
-                "extra_intent", "fetch_replies", "max_age_days", "regions", "keep_unknown_region")
+                "extra_intent", "fetch_replies", "max_age_days", "regions", "keep_unknown_region", "skip_seen")
 
 
 @app.post("/api/tasks/<int:tid>/rerun")

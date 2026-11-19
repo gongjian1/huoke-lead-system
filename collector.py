@@ -197,10 +197,10 @@ def collect_post(conn, t, plat, post, keyword, project, words, billed):
     return got
 
 
-def _search_posts(conn, tid, plat, keyword, want, min_comments, max_age_days=0):
-    """Returns (posts, error_message, skipped_old). Pulls several pages, drops works older than max_age_days
+def _search_posts(conn, tid, plat, keyword, want, min_comments, max_age_days=0, is_seen=None):
+    """Returns (posts, error_message, skipped_old, skipped_seen). Pulls several pages, drops works older than max_age_days
     (the platform's own filter is coarse or missing, so it is checked here as well), keeps the most-commented."""
-    found, cursor, error, old = {}, None, "", 0
+    found, cursor, error, old, seen = {}, None, "", 0, set()
     cutoff = time.time() - max_age_days * 86400 if max_age_days else 0
     for page in range(SEARCH_PAGES + (2 if max_age_days else 0)):
         try:
@@ -217,16 +217,19 @@ def _search_posts(conn, tid, plat, keyword, want, min_comments, max_age_days=0):
             if cutoff and p.get("published") and p["published"] < cutoff:
                 old += 1
                 continue
+            if is_seen and is_seen(p):      # 以前采过：不再抓，改采后面的新作品
+                seen.add(p["pid"])
+                continue
             found.setdefault(p["pid"], p)
         if not cursor or len(found) >= want * 3:
             break
     posts = [p for p in found.values() if p["comment_count"] is None or p["comment_count"] >= min_comments]
     posts.sort(key=lambda p: -(p["comment_count"] or 0))
-    return posts[:want], error, old
+    return posts[:want], error, old, len(seen)
 
 
 def _log_platform(conn, tid, log, key, **inc):
-    entry = log.setdefault(key, {"posts": 0, "comments": 0, "old": 0, "err": ""})
+    entry = log.setdefault(key, {"posts": 0, "comments": 0, "old": 0, "seen": 0, "err": ""})
     for k, v in inc.items():
         entry[k] = (entry[k] + v) if isinstance(v, int) else (v or entry[k])
     _update(conn, tid, platform_log=json.dumps(log, ensure_ascii=False))
@@ -245,6 +248,10 @@ def run_task(tid):
         billed = not conn.execute("SELECT is_admin FROM users WHERE id=?", (t["owner_id"],)).fetchone()[0]
         status = "已完成"
         log = {}
+        owner = t["owner_id"]
+        # 以前已经抓到过评论的作品（只要有评论入库就算采过）；没抓到评论的作品下次还会再试
+        seen_vids = ({r[0] for r in conn.execute("SELECT DISTINCT video_id FROM comments WHERE owner_id=?", (owner,))}
+                     if t["skip_seen"] is None or t["skip_seen"] else set())
         try:
             if t["mode"] == "manual":
                 plat = PLATFORMS[t["platforms"]]
@@ -269,14 +276,17 @@ def run_task(tid):
                         if _stop_requested(conn, tid):
                             raise InterruptedError
                         _update(conn, tid, progress=f"{plat.label} · 「{kw}」搜索中")
-                        posts, err, old = _search_posts(conn, tid, plat, kw, t["posts_per_keyword"], t["min_comments"],
-                                                        t["max_age_days"] or 0)
-                        _log_platform(conn, tid, log, plat.key, err=err, old=old)
+                        posts, err, old, seen = _search_posts(
+                            conn, tid, plat, kw, t["posts_per_keyword"], t["min_comments"], t["max_age_days"] or 0,
+                            is_seen=(lambda p, plat=plat: f"{owner}:{plat.key}:{p['pid']}" in seen_vids) if seen_vids else None)
+                        _log_platform(conn, tid, log, plat.key, err=err, old=old, seen=seen)
                         for i, post in enumerate(posts, 1):
                             if _stop_requested(conn, tid):
                                 raise InterruptedError
                             _update(conn, tid, progress=f"{plat.label} · 「{kw}」第{i}/{len(posts)}个作品")
                             got = collect_post(conn, t, plat, post, kw, project, words, billed)
+                            if got:
+                                seen_vids.add(f"{owner}:{plat.key}:{post['pid']}")
                             _log_platform(conn, tid, log, plat.key, posts=1, comments=got)
         except InterruptedError:
             status = "已停止"
