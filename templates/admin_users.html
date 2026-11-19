@@ -16,9 +16,9 @@
     <div class="metric-sub">待审核 <b class="{{ 'tB' if stats.pending }}">{{ stats.pending }}</b> 个</div>
   </a>
   <div class="metric is-a">
-    <div class="metric-label"><span>用户积分余额</span><span class="code">BALANCE</span></div>
+    <div class="metric-label"><span>用户剩余评论额度</span><span class="code">BALANCE</span></div>
     <div class="metric-num">{{ pts(stats.balance) }}</div>
-    <div class="metric-sub">所有用户剩余积分合计</div>
+    <div class="metric-sub">所有用户剩余额度合计（条）</div>
   </div>
   <div class="metric">
     <div class="metric-label"><span>累计充值</span><span class="code">RECHARGED</span></div>
@@ -54,7 +54,7 @@
 <div class="table-wrap">
 <table class="data-table user-table">
   <thead><tr>
-    <th>用户</th><th>状态</th><th class="r">积分余额</th><th class="r hide-md">充值 / 消耗</th>
+    <th>用户</th><th>状态</th><th class="r">剩余额度</th><th class="r hide-md">充值 / 消耗</th>
     <th class="r hide-md">任务 / 线索</th><th class="hide-md">注册 / 最近登录</th><th class="r">操作</th>
   </tr></thead>
   <tbody>

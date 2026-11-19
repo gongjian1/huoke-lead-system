@@ -5,10 +5,10 @@
 <header class="page-head">
   <div>
     <div class="kicker">Recharge</div>
-    <h1>充值积分</h1>
-    <p class="lead-text">1 积分 = 1 元。扫码付款后提交一下，管理员核对到账后积分会自动加上。</p>
+    <h1>充值评论额度</h1>
+    <p class="lead-text">按评论条数计：筛选 1000 条评论约 {{ (100000 / per_yuan / 100)|round(1)|string|replace(".0", "") }} 元起，套餐越大越便宜。扫码付款后提交一下，管理员核对到账后额度自动加上。</p>
   </div>
-  <div class="head-actions"><span class="balance-chip">{{ icon('coin') }}当前余额 <b>{{ pts(me.balance) }}</b></span></div>
+  <div class="head-actions"><span class="balance-chip">{{ icon('coin') }}剩余额度 <b>{{ pts(me.balance) }}</b> 条</span></div>
 </header>
 
 {% if not has_qr %}
@@ -22,12 +22,12 @@
       <div class="field">
         <div class="field-label"><span class="step">01</span>充多少</div>
         <div class="pkg-grid">
-          {% for amount, bonus in pay.packages %}
-          <label class="pkg"><input type="radio" name="pkg" value="{{ amount }}" data-bonus="{{ bonus }}" {{ 'checked' if loop.index == 2 or (loop.last and loop.length == 1) }}>
+          {% for amount, credits in pay.packages %}
+          <label class="pkg"><input type="radio" name="pkg" value="{{ amount }}" data-credits="{{ credits }}" {{ 'checked' if loop.index == 2 or (loop.last and loop.length == 1) }}>
             <span>
-              <b class="pkg-amt">¥{{ pts(amount) }}</b>
-              <small class="pkg-get">到账 {{ pts(amount + bonus) }} 积分</small>
-              {% if bonus %}<i class="pkg-bonus">送 {{ pts(bonus) }}</i>{% endif %}
+              <b class="pkg-amt">¥{{ yuan(amount) }}</b>
+              <small class="pkg-get">到账 {{ pts(credits) }} 条评论</small>
+              <i class="pkg-bonus">¥{{ '%.1f'|format(amount * 10 / credits)|replace('.0', '') }} / 千条</i>
             </span></label>
           {% endfor %}
           <label class="pkg"><input type="radio" name="pkg" value="custom" {{ 'checked' if not pay.packages }}>
@@ -35,13 +35,13 @@
         </div>
         <div class="custom-amt" id="customBox" hidden>
           <input id="customAmount" class="mono" inputmode="decimal" placeholder="输入金额，元" autocomplete="off" aria-label="自定义金额">
-          <span class="muted">元 · 自定义金额没有赠送</span>
+          <span class="muted">元 · 1 元 = {{ per_yuan }} 条评论（套餐更划算）</span>
         </div>
       </div>
 
       {% if has_qr %}
       <div class="field">
-        <div class="field-label"><span class="step">02</span>扫码付款 <small>请付 <b id="payAmount" style="color:var(--lime)"></b>，金额要和上面一致</small></div>
+        <div class="field-label"><span class="step">02</span>扫码付款 <small>请付 <b id="payAmount" style="color:var(--lime)"></b>，到账 <b id="getCredits" style="color:var(--lime)"></b> 条评论额度，金额要和上面一致</small></div>
         {% if pay.qr.wechat and pay.qr.alipay %}
         <div class="seg" style="margin-bottom:12px">
           {% for key, label in METHODS.items() %}
@@ -77,9 +77,9 @@
     <section class="panel" style="margin-bottom:0">
       <div class="panel-head"><div class="panel-title">{{ icon('list') }}说明 <span class="code">NOTES</span></div></div>
       <ul class="price-notes" style="border-top:0">
-        <li>付款后点「我已付款，提交」，管理员收到款会在后台确认，积分<b>一般几分钟到几小时内</b>到账。</li>
-        <li>积分用来付采集任务和对标账号追踪的费用，<b>AI 仿写和视频不扣积分</b>，用的是你自己的阿里云账号。</li>
-        <li>积分充值后不能提现，没用完的积分一直有效。</li>
+        <li>付款后点「我已付款，提交」，管理员收到款会在后台确认，额度<b>一般几分钟到几小时内</b>到账。</li>
+        <li>采集时<b>每抓到 1 条新评论扣 1 条额度</b>（视频号、公众号每条扣 {{ prices.wechat }} 条），重复的评论不扣；对标账号追踪每次刷新也扣一点。<b>AI 仿写和视频不扣额度</b>，用的是你自己的阿里云账号。</li>
+        <li>额度充值后不能提现，没用完一直有效。</li>
         {% if pay.contact %}<li>付款遇到问题，联系：<b>{{ pay.contact }}</b></li>{% endif %}
         {% if pay.note %}<li>{{ pay.note }}</li>{% endif %}
       </ul>
@@ -94,13 +94,13 @@
   </div>
   <div class="table-wrap">
   <table class="data-table">
-    <thead><tr><th>时间</th><th class="r">付款金额</th><th class="r">赠送</th><th>方式</th><th>状态</th><th></th></tr></thead>
+    <thead><tr><th>时间</th><th class="r">付款金额</th><th class="r">到账评论</th><th>方式</th><th>状态</th><th></th></tr></thead>
     <tbody>
       {% for o in orders %}
       <tr>
         <td class="nw">{{ ago(o.created_at) }}</td>
-        <td class="num r hi">¥{{ pts(o.amount) }}</td>
-        <td class="num r">{{ ('+' ~ pts(o.bonus)) if o.bonus else '—' }}</td>
+        <td class="num r hi">¥{{ yuan(o.amount) }}</td>
+        <td class="num r">{{ pts(o.credits) if o.credits else '—' }} 条</td>
         <td>{{ o.method }}</td>
         <td>{% if o.status == '已到账' %}<span class="badge">已到账</span>
             {% elif o.status == '已拒绝' %}<span class="badge badge-err">已拒绝</span><span class="muted" style="margin-left:6px">{{ o.reject_note }}</span>
@@ -124,6 +124,13 @@ function toast(text, ok) {
   const t = $('toast'); t.textContent = text; t.className = 'toast show ' + (ok ? 'ok' : 'err');
   clearTimeout(t._h); t._h = setTimeout(() => t.className = 'toast', 2600);
 }
+const PER_YUAN = {{ per_yuan }};
+function amountCredits() {
+  const p = pick('pkg');
+  if (p === 'custom') return Math.floor((parseFloat($('customAmount').value) || 0) * PER_YUAN);
+  const r = document.querySelector('input[name=pkg]:checked');
+  return r ? +r.dataset.credits || 0 : 0;
+}
 function amountYuan() {
   const p = pick('pkg');
   if (p === 'custom') return parseFloat($('customAmount').value) || 0;
@@ -134,6 +141,7 @@ function refresh() {
   $('customBox').hidden = !custom;
   const y = amountYuan();
   if ($('payAmount')) $('payAmount').textContent = y ? '¥' + (+y.toFixed(2)) : '—';
+  if ($('getCredits')) $('getCredits').textContent = y ? amountCredits().toLocaleString() : '—';
   const m = pick('method');
   document.querySelectorAll('.qr-box').forEach(b => b.hidden = b.dataset.method !== m);
 }

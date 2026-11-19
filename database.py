@@ -335,11 +335,48 @@ LATER_COLUMNS = {
     "tasks": {"fetch_replies": "INTEGER DEFAULT 1", "platform_log": "TEXT",
               "max_age_days": "INTEGER DEFAULT 0", "regions": "TEXT DEFAULT ''", "keep_unknown_region": "INTEGER DEFAULT 1",
               "skip_seen": "INTEGER DEFAULT 1"},
+    "recharge_orders": {"credits": "INTEGER NOT NULL DEFAULT 0"},   # 这笔付款换来的评论额度（条）
     "videos": {"cover": "TEXT DEFAULT ''", "published_at": "TEXT"},
     "comments": {"is_reply": "INTEGER DEFAULT 0", "province": "TEXT DEFAULT ''", "commented_at": "TEXT"},
     "leads": {"is_reply": "INTEGER DEFAULT 0", "province": "TEXT DEFAULT ''", "commented_at": "TEXT",
               "dm_public": "TEXT DEFAULT ''", "dm_private": "TEXT DEFAULT ''", "dm_at": "TEXT"},
 }
+
+
+def _migrate_comment_units(conn):
+    """积分（单位：分）→ 评论额度（单位：条）。只执行一次。
+
+    按旧的「普通平台每 50 条评论 price_post 积分」折算：1 积分 = 50 / price_post 条，
+    这样已经充值过的用户不会吃亏。余额、累计充值 / 消耗、流水、任务和账号的花费都按同一个系数转换。
+    """
+    if conn.execute("SELECT 1 FROM settings WHERE key='billing_unit'").fetchone():
+        return
+    row = conn.execute("SELECT value FROM settings WHERE key='price_post'").fetchone()
+    try:
+        price = float(row[0]) if row else 0.3
+    except ValueError:
+        price = 0.3
+    per_point = 50 / price if price > 0 else 50 / 0.3     # 1 积分 = 多少条评论
+    f = per_point / 100                                   # 库里存的是「分」
+    for table, cols in (("users", ("balance", "total_spent", "total_recharged")),
+                        ("points_log", ("delta", "balance_after")),
+                        ("tasks", ("points_cost",)), ("accounts", ("points_cost",))):
+        if not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
+            continue
+        for col in cols:
+            conn.execute(f"UPDATE {table} SET {col} = CAST(ROUND({col} * ?) AS INTEGER)", (f,))
+    conn.execute("UPDATE recharge_orders SET credits = CAST(ROUND((amount + bonus) * ?) AS INTEGER) WHERE credits = 0", (f,))
+    track = conn.execute("SELECT value FROM settings WHERE key='price_track'").fetchone()
+    if track is not None:
+        conn.execute("UPDATE settings SET value=? WHERE key='price_track'", ("20" if track[0] == "0.1" else str(int(round(float(track[0] or 0) * per_point))),))
+    bonus = conn.execute("SELECT value FROM settings WHERE key='register_bonus'").fetchone()
+    if bonus is not None:
+        conn.execute("UPDATE settings SET value=? WHERE key='register_bonus'", (str(int(round(float(bonus[0] or 0) * per_point))),))
+    pk = conn.execute("SELECT value FROM settings WHERE key='recharge_packages'").fetchone()
+    if pk is not None and pk[0].strip() == "50 0\n200 20\n500 80\n1000 200":     # 还是旧的默认套餐 → 换成新的
+        conn.execute("UPDATE settings SET value=? WHERE key='recharge_packages'", (DEFAULT_SETTINGS["recharge_packages"],))
+    conn.execute("DELETE FROM settings WHERE key IN ('price_post', 'price_post_wechat')")
+    conn.execute("INSERT INTO settings (key, value) VALUES ('billing_unit', 'comments')")
 
 
 def _backfill_provinces(conn):
@@ -382,9 +419,10 @@ def init_db():
         conn.execute("UPDATE account_posts SET cover='' WHERE cover LIKE '%.kvif%' OR cover LIKE '%.kpg%' OR cover LIKE '%.heic%'")
     if not conn.execute("SELECT 1 FROM users WHERE is_admin=1").fetchone():
         conn.execute("INSERT OR IGNORE INTO users (phone, nickname, is_admin, status) VALUES ('admin', '管理员', 1, '正常')")
+    _migrate_comment_units(conn)
     for k, v in DEFAULT_SETTINGS.items():
         conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (k, v))
-    conn.execute("UPDATE creations SET status='失败', error='服务重启，生成被中断，没有扣积分请重试' WHERE status='生成中'")
+    conn.execute("UPDATE creations SET status='失败', error='服务重启，生成被中断，没有扣额度请重试' WHERE status='生成中'")
     # A task left "running" means the app was closed mid-run.
     conn.execute("UPDATE tasks SET status='已中断' WHERE status IN ('进行中','排队中','停止中')")
     conn.commit()

@@ -30,7 +30,6 @@ import dm
 import tracking
 import vault
 from collector import platform_health, rescore_all, start_task
-from config import COMMENTS_PER_TIER
 from database import get_db, get_setting, init_db, set_setting, word_list
 from icons import icon, logo
 from platforms import LABELS, PLATFORMS
@@ -86,7 +85,8 @@ def qs(**override):
 
 
 app.jinja_env.filters["datefmt"] = lambda ts: time.strftime("%Y-%m-%d", time.localtime(ts)) if ts else "—"
-app.jinja_env.globals.update(icon=icon, logo=logo, pts=billing.fmt, wan=wan, ago=ago, imgp=imgp, qs=qs,
+app.jinja_env.globals.update(icon=icon, logo=logo, pts=billing.fmt,
+                             yuan=lambda cents: f"{(cents or 0) / 100:,.2f}".rstrip("0").rstrip("."), wan=wan, ago=ago, imgp=imgp, qs=qs,
                              REGION_GROUPS=GROUPS, PROVINCES=PROVINCES, OVERSEAS=OVERSEAS)
 init_db()
 if os.environ.get("HUOKE_SCHEDULER") == "1":
@@ -233,7 +233,7 @@ def register():
                     "INSERT INTO users (phone, nickname, password_hash, status) VALUES (?, ?, ?, ?)",
                     (form["phone"], form["nickname"][:20] or form["phone"][-4:], generate_password_hash(pw), status),
                 ).lastrowid
-                bonus = billing.to_cents(get_setting("register_bonus") or 0)
+                bonus = billing.to_units(get_setting("register_bonus") or 0)
                 if bonus > 0:
                     billing.adjust(conn, uid, bonus, "赠送", "注册赠送")
                 conn.commit()
@@ -273,8 +273,8 @@ def inject_globals():
 
 
 def _prices():
-    return {"normal": billing.tier_price("douyin"), "wechat": billing.tier_price("wechat_channels"),
-            "tier": COMMENTS_PER_TIER, "track": tracking.track_price()}
+    return {"normal": billing.unit_cost("douyin"), "wechat": billing.unit_cost("wechat_channels"),
+            "track": tracking.track_price(), "per_yuan": billing.comments_per_yuan()}
 
 
 def _filters():
@@ -973,7 +973,7 @@ def add_account():
     price = 0 if g.user["is_admin"] else tracking.track_price()
     if price and g.user["balance"] < price:
         conn.close()
-        return jsonify(ok=False, message=f"积分不足（当前 {billing.fmt(g.user['balance'])}），请到「充值」页充值"), 402
+        return jsonify(ok=False, message=f"评论额度不足（当前 {billing.fmt(g.user['balance'])} 条），请到「充值」页充值"), 402
     try:
         account_id = tracking.TRACKERS[platform].resolve(text)
     except tracking.AccountError as e:
@@ -1170,17 +1170,17 @@ def admin_user(uid):
         if action == "points":
             kind = request.form.get("kind", "充值")
             try:
-                amount = billing.to_cents(request.form.get("amount", "0"))
+                amount = billing.to_units(request.form.get("amount", "0"))
             except ValueError:
                 amount = 0
             if kind not in POINT_KINDS or not 0 < amount <= 100_000_000:
-                flash("请输入正确的积分数量", "err")
+                flash("请输入正确的评论条数（整数）", "err")
             elif POINT_KINDS[kind] < 0 and amount > user["balance"]:
-                flash(f"余额只有 {billing.fmt(user['balance'])} 积分，不能扣减这么多", "err")
+                flash(f"额度只有 {billing.fmt(user['balance'])} 条，不能扣减这么多", "err")
             else:
                 bal = billing.adjust(conn, uid, amount * POINT_KINDS[kind], kind,
                                      request.form.get("note", "").strip()[:100], operator_id=g.user["id"])
-                flash(f"已{kind} {billing.fmt(amount)} 积分，当前余额 {billing.fmt(bal)}", "ok")
+                flash(f"已{kind} {billing.fmt(amount)} 条评论额度，当前剩余 {billing.fmt(bal)} 条", "ok")
         elif action == "status":
             st = request.form.get("status")
             if st not in USER_STATUSES or (uid == g.user["id"] and st != "正常"):
@@ -1253,17 +1253,18 @@ def admin_settings():
             v = request.form.get(k, "").strip()
             if re.fullmatch(r"[A-Za-z0-9._\-]{1,64}", v):
                 set_setting(k, v)
-        for k in ("price_post", "price_post_wechat", "price_track", "register_bonus"):
+        for k, lo, hi in (("wechat_weight", 1, 100), ("price_track", 0, 100000),
+                          ("register_bonus", 0, 10_000_000), ("comments_per_yuan", 1, 100000)):
             try:
-                v = float(request.form.get(k, ""))
-                if not 0 <= v <= 10000:
+                v = billing.to_units(request.form.get(k, ""))
+                if not lo <= v <= hi:
                     raise ValueError
-                set_setting(k, f"{v:g}")
+                set_setting(k, str(v))
             except ValueError:
                 errors.append(k)
         if request.form.get("register_mode") in ("open", "approval", "closed"):
             set_setting("register_mode", request.form["register_mode"])
-        flash("价格或赠送积分填写有误，那几项没有修改" if errors else "已保存", "err" if errors else "ok")
+        flash("额度相关的设置要填整数（微信倍数至少 1），填错的那几项没有修改" if errors else "已保存", "err" if errors else "ok")
         return redirect(url_for("admin_settings"))
     key = get_setting("api_key")
     masked = (key[:6] + "•" * 10 + key[-4:]) if len(key) > 12 else ""
@@ -1271,8 +1272,8 @@ def admin_settings():
                            ai_text_model=get_setting("ai_text_model"), ai_image_model=get_setting("ai_image_model"),
                            ai_video_model=get_setting("ai_video_model"),
                            strong=get_setting("intent_strong"), medium=get_setting("intent_medium"),
-                           exclude=get_setting("intent_exclude"), price_post=get_setting("price_post"),
-                           price_post_wechat=get_setting("price_post_wechat"), price_track=get_setting("price_track"),
+                           exclude=get_setting("intent_exclude"), wechat_weight=get_setting("wechat_weight"),
+                           price_track=get_setting("price_track"), comments_per_yuan=get_setting("comments_per_yuan"),
                            register_mode=get_setting("register_mode"), register_bonus=get_setting("register_bonus"))
 
 
@@ -1380,21 +1381,23 @@ def _qr_ext(data):
 
 
 def _parse_packages(text):
-    """每行「付款金额 赠送积分」→ [(金额分, 赠送分)]，最多 8 档，金额去重。"""
+    """每行「付款金额（元） 到账评论条数」→ [(金额分, 条数)]，最多 8 档，金额去重。
+    只写金额不写条数的，按「1 元换多少条」自动算。"""
     out, seen = [], set()
     for line in (text or "").splitlines():
         parts = re.split(r"[\s,，:：]+", line.strip())
         if not parts or not parts[0]:
             continue
         try:
-            amount = billing.to_cents(parts[0])
-            bonus = billing.to_cents(parts[1]) if len(parts) > 1 else 0
+            yuan = float(parts[0])
+            amount = int(round(yuan * 100))
+            credits = billing.to_units(parts[1]) if len(parts) > 1 else int(yuan * billing.comments_per_yuan())
         except ValueError:
             continue
-        if not 100 <= amount <= 5_000_000 or not 0 <= bonus <= 10_000_000 or amount in seen:
+        if not 100 <= amount <= 5_000_000 or not 1 <= credits <= 100_000_000 or amount in seen:
             continue
         seen.add(amount)
-        out.append((amount, bonus))
+        out.append((amount, credits))
     return sorted(out)[:8]
 
 
@@ -1411,7 +1414,7 @@ def recharge_page():
     orders = conn.execute("SELECT * FROM recharge_orders WHERE user_id=? ORDER BY id DESC LIMIT 20",
                           (g.user["id"],)).fetchall()
     conn.close()
-    return render_template("recharge.html", pay=_pay_info(), orders=orders, METHODS=PAY_METHODS,
+    return render_template("recharge.html", pay=_pay_info(), orders=orders, METHODS=PAY_METHODS, per_yuan=billing.comments_per_yuan(), prices=_prices(),
                            CUSTOM_MIN=CUSTOM_MIN, CUSTOM_MAX=CUSTOM_MAX)
 
 
@@ -1442,21 +1445,21 @@ def create_recharge():
             return jsonify(ok=False, message="金额填写有误"), 400
         if not CUSTOM_MIN <= yuan <= CUSTOM_MAX:
             return jsonify(ok=False, message=f"自定义金额要在 {CUSTOM_MIN} 到 {CUSTOM_MAX} 元之间"), 400
-        amount, bonus = billing.to_cents(yuan), 0
+        amount, credits = int(round(yuan * 100)), int(yuan * billing.comments_per_yuan())
     else:
         amount_c = _int(d.get("amount"), 0, 0, 10 ** 9)
         match = [p for p in pay["packages"] if p[0] == amount_c]
         if not match:
             return jsonify(ok=False, message="套餐已经变了，请刷新页面重新选择"), 400
-        amount, bonus = match[0]
+        amount, credits = match[0]
     conn = get_db()
     pending = conn.execute("SELECT COUNT(*) FROM recharge_orders WHERE user_id=? AND status='待确认'",
                            (g.user["id"],)).fetchone()[0]
     if pending >= MAX_PENDING_ORDERS:
         conn.close()
         return jsonify(ok=False, message=f"你还有 {pending} 笔付款在等管理员确认，确认后再提交新的"), 429
-    cur = conn.execute("INSERT INTO recharge_orders (user_id, amount, bonus, method, payer_note) VALUES (?,?,?,?,?)",
-                       (g.user["id"], amount, bonus, PAY_METHODS[method], note))
+    cur = conn.execute("INSERT INTO recharge_orders (user_id, amount, bonus, credits, method, payer_note) VALUES (?,?,?,?,?,?)",
+                       (g.user["id"], amount, 0, credits, PAY_METHODS[method], note))
     conn.commit()
     conn.close()
     return jsonify(ok=True, id=cur.lastrowid)
@@ -1495,9 +1498,9 @@ def _save_pay_settings():
     text = request.form.get("recharge_packages", "")
     pk = _parse_packages(text)
     if text.strip() and not pk:
-        flash("套餐一行都没识别出来，格式是「付款金额 赠送积分」，例如 200 20，没有修改", "err")
+        flash("套餐一行都没识别出来，格式是「付款金额 到账条数」，例如 45 5000，没有修改", "err")
     else:
-        set_setting("recharge_packages", "\n".join(f"{a / 100:g} {b / 100:g}" for a, b in pk))
+        set_setting("recharge_packages", "\n".join(f"{a / 100:g} {c}" for a, c in pk))
     set_setting("recharge_contact", request.form.get("recharge_contact", "").strip()[:60])
     set_setting("recharge_note", request.form.get("recharge_note", "").strip()[:300])
     os.makedirs(ai.MEDIA_DIR, exist_ok=True)
@@ -1538,25 +1541,24 @@ def _handle_order(action):
             conn.commit()
             flash(f"订单 #{oid} 已拒绝", "ok")
             return
-        try:  # 管理员可以按实际收到的钱改金额
-            amount = billing.to_cents(request.form.get("amount", ""))
-            bonus = billing.to_cents(request.form.get("bonus") or "0")
+        try:  # 管理员可以按实际收到的钱、实际要给的条数来改
+            amount = int(round(float(request.form.get("amount", "")) * 100))
+            credits = billing.to_units(request.form.get("credits", ""))
         except ValueError:
-            flash("金额填写有误", "err")
+            flash("金额或条数填写有误", "err")
             return
-        if not 0 < amount <= 100_000_000 or not 0 <= bonus <= 100_000_000:
-            flash("金额填写有误", "err")
+        if not 0 < amount <= 100_000_000 or not 0 < credits <= 1_000_000_000:
+            flash("金额或条数填写有误", "err")
             return
-        cur = conn.execute("UPDATE recharge_orders SET status='已到账', amount=?, bonus=?, handled_at=datetime('now','localtime'), "
-                           "handled_by=? WHERE id=? AND status='待确认'", (amount, bonus, g.user["id"], oid))
+        cur = conn.execute("UPDATE recharge_orders SET status='已到账', amount=?, credits=?, handled_at=datetime('now','localtime'), "
+                           "handled_by=? WHERE id=? AND status='待确认'", (amount, credits, g.user["id"], oid))
         if cur.rowcount != 1:  # 并发点了两次，只入账一次
             flash("这笔订单已经处理过了", "err")
             return
-        billing.adjust(conn, order["user_id"], amount, "充值", f"{order['method']}付款 · 订单 #{oid}", operator_id=g.user["id"])
-        if bonus:
-            billing.adjust(conn, order["user_id"], bonus, "赠送", f"充值套餐赠送 · 订单 #{oid}", operator_id=g.user["id"])
+        billing.adjust(conn, order["user_id"], credits, "充值", f"{order['method']}付款 ¥{amount / 100:g} · 订单 #{oid}",
+                       operator_id=g.user["id"])
         conn.commit()
-        flash(f"订单 #{oid} 已到账：{billing.fmt(amount)} 积分" + (f" + 赠送 {billing.fmt(bonus)}" if bonus else ""), "ok")
+        flash(f"订单 #{oid} 已到账：{billing.fmt(credits)} 条评论额度", "ok")
     finally:
         conn.close()
 
@@ -1573,9 +1575,9 @@ def _int(v, default, lo, hi):
 def _check_points(platform_keys):
     if g.user["is_admin"]:
         return None
-    cheapest = min(billing.tier_price(k) for k in platform_keys)
+    cheapest = min(billing.unit_cost(k) for k in platform_keys)
     if g.user["balance"] < cheapest:
-        return f"积分不足（当前 {billing.fmt(g.user['balance'])}），请到「充值」页充值"
+        return f"评论额度不足（当前 {billing.fmt(g.user['balance'])} 条），请到「充值」页充值"
     return None
 
 

@@ -11,7 +11,7 @@ import urllib.request
 from datetime import datetime, timedelta
 
 from api import ApiError, request
-from billing import to_cents
+from billing import to_units
 from database import get_db, get_setting
 from platforms import clean, pick_cover, to_int
 
@@ -275,7 +275,7 @@ TRACKERS = {t.key: t for t in [DouyinT(), XiaohongshuT(), KuaishouT(), BilibiliT
 
 def track_price():
     try:
-        return max(0, to_cents(get_setting("price_track") or 0))
+        return max(0, to_units(get_setting("price_track") or 0))
     except ValueError:
         return 0
 
@@ -301,9 +301,9 @@ def refresh_account(conn, acc_id, initial=False):
     price = 0 if a["is_admin"] else track_price()
     if price and a["balance"] < price:
         conn.execute("UPDATE accounts SET active=0, last_error=?, next_check=NULL WHERE id=?",
-                     ("积分不足，已暂停追踪，充值后点「恢复」", acc_id))
+                     ("评论额度不足，已暂停追踪，充值后点「恢复」", acc_id))
         conn.commit()
-        raise AccountError("积分不足，已暂停追踪")
+        raise AccountError("评论额度不足，已暂停追踪")
     try:
         profile, posts = TRACKERS[a["platform"]].refresh(dict(a))
     except ApiError as e:
@@ -347,18 +347,18 @@ def refresh_account(conn, acc_id, initial=False):
     return len(posts)
 
 
-def charge_track(conn, user_id, acc_id, cents):
+def charge_track(conn, user_id, acc_id, units):
     """All tracking charges of one user on one day share a single ledger row."""
-    conn.execute("UPDATE users SET balance = balance - ?, total_spent = total_spent + ? WHERE id = ?", (cents, cents, user_id))
+    conn.execute("UPDATE users SET balance = balance - ?, total_spent = total_spent + ? WHERE id = ?", (units, units, user_id))
     bal = conn.execute("SELECT balance FROM users WHERE id=?", (user_id,)).fetchone()[0]
     note = f"对标账号追踪 {datetime.now():%m-%d}"
     row = conn.execute("SELECT id FROM points_log WHERE user_id=? AND kind='扣费' AND note=?", (user_id, note)).fetchone()
     if row:
-        conn.execute("UPDATE points_log SET delta = delta - ?, balance_after = ? WHERE id = ?", (cents, bal, row[0]))
+        conn.execute("UPDATE points_log SET delta = delta - ?, balance_after = ? WHERE id = ?", (units, bal, row[0]))
     else:
         conn.execute("INSERT INTO points_log (user_id, delta, balance_after, kind, note) VALUES (?, ?, ?, '扣费', ?)",
-                     (user_id, -cents, bal, note))
-    conn.execute("UPDATE accounts SET points_cost = points_cost + ? WHERE id=?", (cents, acc_id))
+                     (user_id, -units, bal, note))
+    conn.execute("UPDATE accounts SET points_cost = points_cost + ? WHERE id=?", (units, acc_id))
     conn.commit()
 
 

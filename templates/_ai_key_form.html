@@ -4,7 +4,7 @@
     <span class="panel-meta state {{ 'on' if ai_info.has_key }}">{{ '已设置' if ai_info.has_key else '未设置' }}</span>
   </div>
   <div class="panel-body">
-    <p class="panel-note">「仿写」用的是<b>你自己的阿里云百炼账号</b>：文案由通义千问写，配图由千问文生图画。生成的费用由阿里云直接向你收取，我们不加价、不扣积分。</p>
+    <p class="panel-note">「仿写」用的是<b>你自己的阿里云百炼账号</b>：文案由通义千问写，配图由千问文生图画。生成的费用由阿里云直接向你收取，我们不加价、不扣评论额度。</p>
     {% if not ai_info.has_key %}
     <ol class="steps">
       <li>打开 <a href="https://bailian.console.aliyun.com/" target="_blank" rel="noopener">阿里云百炼控制台</a>，登录并开通百炼服务（新账号一般有免费额度，以阿里云页面为准）。</li>

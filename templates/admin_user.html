@@ -13,9 +13,9 @@
 
 <section class="metrics crop">
   <div class="metric is-a">
-    <div class="metric-label"><span>积分余额</span><span class="code">BALANCE</span></div>
+    <div class="metric-label"><span>剩余评论额度</span><span class="code">BALANCE</span></div>
     <div class="metric-num">{{ '∞' if user.is_admin else pts(user.balance) }}</div>
-    <div class="metric-sub">{{ '管理员不扣积分' if user.is_admin else '1 积分 = 1 元' }}</div>
+    <div class="metric-sub">{{ '管理员不扣额度' if user.is_admin else '单位：条评论' }}</div>
   </div>
   <div class="metric">
     <div class="metric-label"><span>累计充值</span><span class="code">RECHARGED</span></div>
@@ -38,8 +38,8 @@
   <form class="panel" method="post" id="points">
     <input type="hidden" name="action" value="points">
     <div class="panel-head">
-      <div class="panel-title">{{ icon('coin') }}积分操作 <span class="code">POINTS</span></div>
-      <span class="panel-meta">当前 {{ pts(user.balance) }} 积分</span>
+      <div class="panel-title">{{ icon('coin') }}额度操作 <span class="code">POINTS</span></div>
+      <span class="panel-meta">当前 {{ pts(user.balance) }} 条</span>
     </div>
     <div class="panel-body">
       <div class="field">
@@ -51,7 +51,7 @@
         </div>
       </div>
       <div class="field">
-        <label class="field-label" for="amount">积分数量 <small>1 积分 = 1 元，可以填小数</small></label>
+        <label class="field-label" for="amount">评论条数 <small>整数，单位是条评论</small></label>
         <div class="amount-row">
           <input id="amount" name="amount" class="mono amount-input" inputmode="decimal" placeholder="0" required>
           <div class="chips quick">
@@ -61,7 +61,7 @@
       </div>
       <div class="field">
         <label class="field-label" for="note">备注 <small>比如：微信转账 100 元</small></label>
-        <input id="note" name="note" maxlength="100" placeholder="选填，用户在积分明细里能看到">
+        <input id="note" name="note" maxlength="100" placeholder="选填，用户在额度明细里能看到">
       </div>
       <button class="btn btn-primary btn-lg">{{ icon('check') }}确认</button>
     </div>
@@ -108,7 +108,7 @@
 
 <section class="panel">
   <div class="panel-head">
-    <div class="panel-title">{{ icon('receipt') }}积分明细 <span class="code">LEDGER</span></div>
+    <div class="panel-title">{{ icon('receipt') }}额度明细 <span class="code">LEDGER</span></div>
     <span class="panel-meta">最近 200 条</span>
   </div>
   {% set show_operator = true %}
@@ -122,7 +122,7 @@
   </div>
   <div class="table-wrap">
   <table class="data-table">
-    <thead><tr><th class="hide-sm">#</th><th class="hide-sm">时间</th><th>关键词</th><th>状态</th><th class="r hide-sm">作品</th><th class="r">A / B</th><th class="r">积分</th><th class="r hide-sm">API 成本</th></tr></thead>
+    <thead><tr><th class="hide-sm">#</th><th class="hide-sm">时间</th><th>关键词</th><th>状态</th><th class="r hide-sm">作品</th><th class="r">A / B</th><th class="r">额度</th><th class="r hide-sm">API 成本</th></tr></thead>
     <tbody>
     {% for t in tasks %}
     <tr>
@@ -149,7 +149,7 @@ document.querySelectorAll('.quick .chip').forEach(c => c.onclick = () => { docum
 const WHO = {{ (user.nickname or user.phone)|tojson }};
 document.getElementById('points').addEventListener('submit', e => {
   const kind = e.target.querySelector('input[name=kind]:checked').value, amt = e.target.amount.value;
-  if (!confirm(`确认给「${WHO}」${kind} ${amt} 积分？`)) e.preventDefault();
+  if (!confirm(`确认给「${WHO}」${kind} ${amt} 条评论额度？`)) e.preventDefault();
 });
 </script>
 {% endblock %}

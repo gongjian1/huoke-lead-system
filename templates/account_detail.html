@@ -43,7 +43,7 @@
     <div class="metric-sub">上次 <b>{{ ago(acc.last_checked) }}</b>{% if acc.active and acc.next_check %} · 下次 <b>{{ ago(acc.next_check) }}</b>{% endif %}</div>
   </div>
   <div class="metric">
-    <div class="metric-label"><span>已花积分</span><span class="code">SPENT</span></div>
+    <div class="metric-label"><span>已花额度（条）</span><span class="code">SPENT</span></div>
     <div class="metric-num">{{ pts(acc.points_cost) }}</div>
     <div class="metric-sub">追踪这个账号累计</div>
   </div>

@@ -17,7 +17,7 @@
   <p class="panel-note" style="padding:14px 18px 0;margin:0">先到微信 / 支付宝的收款记录里核对金额和付款人，确认收到了再点「确认到账」。实际收到的金额和订单不一样，可以直接改金额。</p>
   <div class="table-wrap">
   <table class="data-table">
-    <thead><tr><th>用户</th><th>付款备注</th><th>方式 · 时间</th><th class="r">到账积分 / 赠送</th><th></th></tr></thead>
+    <thead><tr><th>用户</th><th>付款备注</th><th>方式 · 时间</th><th class="r">实收金额 → 到账评论条数</th><th></th></tr></thead>
     <tbody>
       {% for o in pending %}
       <tr>
@@ -27,9 +27,9 @@
         <td colspan="2">
           <form method="post" class="order-form">
             <input type="hidden" name="order_id" value="{{ o.id }}">
-            <input name="amount" class="mono" value="{{ pts(o.amount) }}" inputmode="decimal" aria-label="到账积分" size="6">
-            <span class="muted">+ 送</span>
-            <input name="bonus" class="mono" value="{{ pts(o.bonus) }}" inputmode="decimal" aria-label="赠送积分" size="5">
+            <span class="muted">¥</span><input name="amount" class="mono" value="{{ yuan(o.amount) }}" inputmode="decimal" aria-label="实收金额（元）" size="6">
+            <span class="muted">→</span>
+            <input name="credits" class="mono" value="{{ o.credits }}" inputmode="numeric" aria-label="到账评论条数" size="8"><span class="muted">条</span>
             <button class="btn-sm" name="action" value="confirm">{{ icon('check') }}确认到账</button>
             <input name="reject_note" placeholder="拒绝原因（可不填）" maxlength="60" aria-label="拒绝原因">
             <button class="btn-sm danger" name="action" value="reject" onclick="return confirm('确定拒绝这笔？')">拒绝</button>
@@ -61,7 +61,7 @@
     <p class="panel-note">收款码是你自己的微信 / 支付宝「收款码」截图，PNG、JPG、WEBP 都行，2MB 以内。只有登录的用户能看到，没上传的那种付款方式不会显示。</p>
 
     <div class="grid-2-even">
-      <label class="adv-label">充值套餐 <small class="muted">每行「付款金额 赠送积分」，最多 8 档</small>
+      <label class="adv-label">充值套餐 <small class="muted">每行「付款金额（元） 到账条数」，最多 8 档，例如 45 5000</small>
         <textarea name="recharge_packages" class="mono" rows="6" spellcheck="false" style="min-height:130px">{{ packages_text }}</textarea></label>
       <div>
         <label class="adv-label" style="margin-bottom:14px">联系方式 <small class="muted">显示在充值页，例如你的微信号</small>
@@ -81,15 +81,15 @@
   </div>
   <div class="table-wrap">
   <table class="data-table">
-    <thead><tr><th>用户</th><th>付款备注</th><th>方式</th><th class="r">金额</th><th class="r">赠送</th><th>结果</th><th>处理时间</th></tr></thead>
+    <thead><tr><th>用户</th><th>付款备注</th><th>方式</th><th class="r">金额</th><th class="r">到账条数</th><th>结果</th><th>处理时间</th></tr></thead>
     <tbody>
       {% for o in history %}
       <tr>
         <td><a href="/admin/users/{{ o.user_id }}" style="color:var(--text)">{{ o.nickname or o.phone }}</a></td>
         <td>{{ o.payer_note }}</td>
         <td>{{ o.method }}</td>
-        <td class="num r hi">¥{{ pts(o.amount) }}</td>
-        <td class="num r">{{ ('+' ~ pts(o.bonus)) if o.bonus else '—' }}</td>
+        <td class="num r hi">¥{{ yuan(o.amount) }}</td>
+        <td class="num r">{{ pts(o.credits) if o.credits else '—' }}</td>
         <td>{% if o.status == '已到账' %}<span class="badge">已到账</span>{% else %}<span class="badge badge-err">已拒绝</span> <span class="muted">{{ o.reject_note }}</span>{% endif %}</td>
         <td class="nw muted">{{ (o.handled_at or '')[5:16] }}</td>
       </tr>

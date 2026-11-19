@@ -5,8 +5,7 @@ from datetime import datetime
 
 import api
 from api import ApiError
-from billing import OutOfPoints, charge_task, tier_price, tiers_for
-from config import COMMENTS_PER_TIER
+from billing import OutOfPoints, charge_task, unit_cost
 from database import get_db, get_setting, set_setting, word_list
 from platforms import PLATFORMS
 from regions import normalize_region, region_ok
@@ -154,16 +153,16 @@ def _fill_link(conn, plat, post, vid):
 
 def collect_post(conn, t, plat, post, keyword, project, words, billed):
     tid, owner, limit = t["id"], t["owner_id"], t["comments_per_post"]
-    price = tier_price(plat.key) if billed else 0
-    if price:
+    unit = unit_cost(plat.key) if billed else 0      # 每抓 1 条新评论扣几条额度
+    if unit:
         balance = conn.execute("SELECT balance FROM users WHERE id=?", (owner,)).fetchone()[0]
-        affordable = balance // price
+        affordable = balance // unit
         if affordable < 1:
             raise OutOfPoints
-        limit = min(limit, affordable * COMMENTS_PER_TIER)
+        limit = min(limit, affordable)
     vid = save_post(conn, owner, plat, post, keyword, project, tid)
     replies = bool(t["fetch_replies"]) and plat.supports_replies
-    state = {"got": 0, "cursor": None, "more": True}
+    state = {"got": 0, "new": 0, "cursor": None, "more": True}
     parents = []
 
     region_cfg = (t["regions"] or "", t["keep_unknown_region"] if t["keep_unknown_region"] is not None else 1)
@@ -171,6 +170,7 @@ def collect_post(conn, t, plat, post, keyword, project, words, billed):
     def store(batch, is_reply):
         new, a, b = save_comments(conn, owner, plat, vid, batch, keyword, project, words, is_reply, region_cfg)
         state["got"] += len(batch)
+        state["new"] += new
         _bump(conn, tid, comments=new, leads_a=a, leads_b=b)
 
     def top_level(budget):
@@ -186,7 +186,7 @@ def collect_post(conn, t, plat, post, keyword, project, words, billed):
             state["more"] = bool(batch) and state["cursor"] not in (None, "", 0)
             time.sleep(0.3)
 
-    top_level(max(COMMENTS_PER_TIER // 2, int(limit * TOP_LEVEL_SHARE)) if replies else limit)
+    top_level(max(25, int(limit * TOP_LEVEL_SHARE)) if replies else limit)
     if replies:
         for par in sorted(parents, key=lambda c: -c["replies"]):
             rcur = None
@@ -207,8 +207,8 @@ def collect_post(conn, t, plat, post, keyword, project, words, billed):
         top_level(limit)
     _bump(conn, tid, posts=1)
     got = state["got"]
-    if price and got:
-        charge_task(conn, owner, tid, min(tiers_for(got), tiers_for(limit)) * price)
+    if unit and state["new"]:    # 只为新抓到的评论付费，重复的不扣；最多扣到设定的上限
+        charge_task(conn, owner, tid, min(state["new"], limit) * unit)
     if got and not post.get("url"):
         _fill_link(conn, plat, post, vid)
     return got
@@ -309,7 +309,7 @@ def run_task(tid):
             status = "已停止"
         except OutOfPoints:
             status = "余额不足"
-            _update(conn, tid, progress="积分用完，任务已自动停止，充值后可重新采集")
+            _update(conn, tid, progress="评论额度用完，任务已自动停止，充值后可重新采集")
         except Exception as e:
             status = "出错"
             _update(conn, tid, progress=f"出错：{e}"[:300])

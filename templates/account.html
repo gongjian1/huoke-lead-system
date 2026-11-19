@@ -10,17 +10,17 @@
 
 <section class="metrics crop metrics-3">
   <div class="metric is-a">
-    <div class="metric-label"><span>积分余额</span><span class="code">BALANCE</span></div>
+    <div class="metric-label"><span>剩余评论额度</span><span class="code">BALANCE</span></div>
     <div class="metric-num">{{ '∞' if me.is_admin else pts(me.balance) }}</div>
-    <div class="metric-sub">{{ '管理员采集不扣积分' if me.is_admin else '1 积分 = 1 元' }}{% if not me.is_admin %} · <a href="/recharge" style="color:var(--lime)">去充值</a>{% endif %}</div>
+    <div class="metric-sub">{{ '管理员采集不扣额度' if me.is_admin else '条评论 · 每抓 1 条新评论扣 1 条' }}{% if not me.is_admin %} · <a href="/recharge" style="color:var(--lime)">去充值</a>{% endif %}</div>
   </div>
   <div class="metric">
-    <div class="metric-label"><span>累计消耗</span><span class="code">SPENT</span></div>
+    <div class="metric-label"><span>累计消耗（条）</span><span class="code">SPENT</span></div>
     <div class="metric-num">{{ pts(me.total_spent) }}</div>
     <div class="metric-sub">共 <b>{{ usage.tasks }}</b> 个采集任务</div>
   </div>
   <div class="metric">
-    <div class="metric-label"><span>累计充值</span><span class="code">RECHARGED</span></div>
+    <div class="metric-label"><span>累计充值（条）</span><span class="code">RECHARGED</span></div>
     <div class="metric-num">{{ pts(me.total_recharged) }}</div>
     <div class="metric-sub">注册于 <b>{{ (me.created_at or '')[:10] }}</b></div>
   </div>
@@ -30,27 +30,27 @@
   <section class="panel">
     <div class="panel-head">
       <div class="panel-title">{{ icon('coin') }}收费标准 <span class="code">PRICING</span></div>
-      <span class="panel-meta">1 积分 = 1 元</span>
+      <span class="panel-meta">额度单位：条评论</span>
     </div>
     <div class="table-wrap">
     <table class="data-table">
-      <thead><tr><th>平台</th><th class="r">每个作品 · 每 {{ prices.tier }} 条评论</th><th class="r">搜 1 个关键词（5 个作品）</th></tr></thead>
+      <thead><tr><th>平台</th><th class="r">每抓 1 条新评论扣</th><th class="r">筛选 1000 条评论约扣</th></tr></thead>
       <tbody>
         <tr><td>抖音 · 小红书 · 快手 · B站 · 微博 · 知乎 · 西瓜 · 头条 · 皮皮虾</td>
-            <td class="num r hi">{{ pts(prices.normal) }} 积分</td><td class="num r hi">约 {{ pts(prices.normal * 5) }} 积分</td></tr>
+            <td class="num r hi">{{ prices.normal }} 条额度</td><td class="num r hi">{{ pts(prices.normal * 1000) }} 条额度</td></tr>
         <tr><td>视频号 · 公众号 <span class="tag">接口成本高</span></td>
-            <td class="num r hi">{{ pts(prices.wechat) }} 积分</td><td class="num r hi">约 {{ pts(prices.wechat * 5) }} 积分</td></tr>
+            <td class="num r hi">{{ prices.wechat }} 条额度</td><td class="num r hi">{{ pts(prices.wechat * 1000) }} 条额度</td></tr>
         <tr><td>AI 仿写 / 配图 <span class="tag">自带 Key</span></td>
-            <td class="num r hi">0 积分</td><td class="num r hi">用你自己的阿里云 Key，费用由阿里云收取</td></tr>
+            <td class="num r hi">不扣额度</td><td class="num r hi">用你自己的阿里云 Key，费用由阿里云收取</td></tr>
         <tr><td>对标账号追踪 <span class="tag">每刷新一次</span></td>
-            <td class="num r hi">{{ pts(prices.track) }} 积分</td><td class="num r hi">每 12 小时刷新 ≈ 每月 {{ pts(prices.track * 60) }} 积分 / 个</td></tr>
+            <td class="num r hi">{{ pts(prices.track) }} 条额度</td><td class="num r hi">每 12 小时刷新 ≈ 每月 {{ pts(prices.track * 60) }} 条 / 个</td></tr>
       </tbody>
     </table>
     </div>
     <ul class="price-notes">
-      <li>按<b>实际抓到的评论</b>收费，搜不到、没评论的作品不收钱。</li>
-      <li>每个作品不足 {{ prices.tier }} 条评论也按 1 档算；设置"每个作品最多抓 100 条"就是最多 2 档。</li>
-      <li>积分不够时会自动少抓或停止，不会扣成负数。</li>
+      <li>按<b>新抓到的评论条数</b>扣额度：抓到 100 条新评论就扣 100 条，搜不到、没评论、重复的评论都不扣。</li>
+      <li>"每个作品最多抓 100 条"就是这个作品最多扣 100 条（视频号、公众号每条扣 {{ prices.wechat }} 条）。</li>
+      <li>额度不够时会自动少抓或停止，不会扣成负数。</li>
     </ul>
   </section>
 
@@ -89,7 +89,7 @@
 
 <section class="panel">
   <div class="panel-head">
-    <div class="panel-title">{{ icon('receipt') }}积分明细 <span class="code">LEDGER</span></div>
+    <div class="panel-title">{{ icon('receipt') }}额度明细 <span class="code">LEDGER</span></div>
     <span class="panel-meta">最近 100 条</span>
   </div>
   {% include "_ledger_table.html" %}

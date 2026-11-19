@@ -52,7 +52,7 @@
       </div>
 
       <div class="field">
-        <div class="field-label"><span class="step">04</span>抓取深度 <small>作品越多、评论越多，线索越全，积分也越多</small></div>
+        <div class="field-label"><span class="step">04</span>抓取深度 <small>作品越多、评论越多，线索越全，消耗的评论额度也越多</small></div>
         <div class="seg depth">
           {% for k, label, n, c in [('fast', '快速', 5, 100), ('std', '标准', 10, 100), ('deep', '深度', 20, 200)] %}
           <label class="seg-item"><input type="radio" name="depth" value="{{ k }}" data-n="{{ n }}" data-c="{{ c }}" {{ 'checked' if loop.first }}>
@@ -63,7 +63,7 @@
         <label class="check-line"><input type="checkbox" id="fetchReplies" checked>
           <span>抓取楼中楼回复 <small>很多"怎么联系""多少钱"藏在回复里，开启后线索更全（回复也按评论计费）</small></span></label>
         <label class="check-line"><input type="checkbox" id="skipSeen" checked>
-          <span>跳过已采集过的作品 <small>搜到你以前采过的作品就直接跳过，改采新的，不重复收积分。想刷新旧作品的新评论时，取消勾选</small></span></label>
+          <span>跳过已采集过的作品 <small>搜到你以前采过的作品就直接跳过，改采新的，不重复扣额度。想刷新旧作品的新评论时，取消勾选</small></span></label>
       </div>
 
       <div class="field">
@@ -107,7 +107,7 @@
       </details>
 
       <div class="estimate" id="estimate"></div>
-      <p class="price-line">{{ icon('coin') }}{% if me.is_admin %}管理员采集不扣积分{% else %}收费：普通平台每个作品 {{ pts(prices.normal) }} 积分、视频号/公众号 {{ pts(prices.wechat) }} 积分（每 {{ prices.tier }} 条评论一档），只按实际抓到的收费 · <a href="/account">收费说明</a>{% endif %}</p>
+      <p class="price-line">{{ icon('coin') }}{% if me.is_admin %}管理员采集不扣额度{% else %}收费：每抓到 1 条<b>新</b>评论扣 {{ prices.normal }} 条额度（视频号 / 公众号每条扣 {{ prices.wechat }} 条），搜不到、没评论、重复的不扣 · <a href="/account">收费说明</a>{% endif %}</p>
       <div class="submit-row">
         <button class="btn btn-primary btn-lg" id="startSearch">{{ icon('scan') }}开始采集</button>
         <div class="form-msg" id="searchMsg"></div>
@@ -176,15 +176,14 @@ const ICON_STOP = {{ icon('stop')|string|tojson }};
 const ICON_ARROW = {{ icon('arrow')|string|tojson }};
 const ICON_REFRESH = {{ icon('refresh')|string|tojson }};
 const IS_ADMIN = {{ 'true' if me.is_admin else 'false' }};
-const PRICE = {normal: {{ prices.normal }}, wechat: {{ prices.wechat }}}, TIER = {{ prices.tier }};
+const PRICE = {normal: {{ prices.normal }}, wechat: {{ prices.wechat }}};
 let BALANCE = {{ me.balance }};
-const pts = c => String(+(c / 100).toFixed(2));
+const pts = c => Math.round(+c || 0).toLocaleString();
 const priceOf = p => p.startsWith('wechat') ? PRICE.wechat : PRICE.normal;
-const tiers = n => Math.max(1, Math.ceil((+n || 0) / TIER));
-function costLine(maxCents) {
-  if (IS_ADMIN) return '<span>管理员 · 不扣积分</span>';
-  const warn = maxCents > BALANCE ? `<span class="warn">· 余额 ${pts(BALANCE)}，不够时会自动少抓</span>` : `<span>· 余额 ${pts(BALANCE)}</span>`;
-  return `<span>最多消耗</span><b>${pts(maxCents)}</b><span>积分</span>${warn}`;
+function costLine(maxUnits) {
+  if (IS_ADMIN) return '<span>管理员 · 不扣额度</span>';
+  const warn = maxUnits > BALANCE ? `<span class="warn">· 剩余 ${pts(BALANCE)} 条，不够时会自动少抓</span>` : `<span>· 剩余 ${pts(BALANCE)} 条</span>`;
+  return `<span>最多消耗</span><b>${pts(maxUnits)}</b><span>条评论额度</span>${warn}`;
 }
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -197,14 +196,14 @@ function pickedPlatforms() {
 }
 function refreshEstimate() {
   const pf = pickedPlatforms(), k = keywordsList().length, p = pf.length, n = +$('postsPer').value || 0;
-  const maxCents = k * n * tiers($('commentsPer').value) * pf.reduce((s, x) => s + priceOf(x), 0);
+  const maxCents = k * n * (+$('commentsPer').value || 0) * pf.reduce((s, x) => s + priceOf(x), 0);
   $('estimate').innerHTML = k && p
     ? `<span>最多</span><b>${k * p * n}</b><span>个作品 = ${k} 词 × ${p} 平台 × ${n}</span><span class="sep"></span>${costLine(maxCents)}`
     : '';
 }
 function refreshManualEstimate() {
   const n = $('mLinks').value.split('\n').filter(s => s.trim()).length;
-  $('mEstimate').innerHTML = n ? `<span>${n} 个作品</span><span class="sep"></span>${costLine(n * tiers($('mComments').value) * priceOf($('mPlatform').value))}` : '';
+  $('mEstimate').innerHTML = n ? `<span>${n} 个作品</span><span class="sep"></span>${costLine(n * (+$('mComments').value || 0) * priceOf($('mPlatform').value))}` : '';
 }
 ['mLinks', 'mComments'].forEach(id => $(id).addEventListener('input', refreshManualEstimate));
 $('mPlatform').addEventListener('change', refreshManualEstimate);
@@ -297,7 +296,7 @@ async function loadTasks() {
   const running = tasks.some(t => ['进行中', '排队中', '停止中'].includes(t.status));
   $('taskBody').innerHTML = tasks.map(t => {
     const api$ = (t.balance_before != null && t.balance_after != null) ? '$' + (t.balance_before - t.balance_after).toFixed(3) : '';
-    const cost = IS_ADMIN ? (api$ || '–') : (t.points_cost ? pts(t.points_cost) + ' 积分' : '–');
+    const cost = IS_ADMIN ? (api$ || '–') : (t.points_cost ? pts(t.points_cost) + ' 条' : '–');
     let plog = {};
     try { plog = JSON.parse(t.platform_log || '{}') || {}; } catch (e) {}
     const pf = (t.platforms || '').split(',').map(p => {

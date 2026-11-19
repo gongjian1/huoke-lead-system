@@ -7,7 +7,7 @@
     <h1>线索</h1>
   </div>
   <div class="head-actions">
-    <button class="btn" id="rescore" type="button" title="用最新的意向词把以前抓过的评论再筛一遍，不扣积分">{{ icon('refresh') }}重新筛选</button>
+    <button class="btn" id="rescore" type="button" title="用最新的意向词把以前抓过的评论再筛一遍，不扣评论额度">{{ icon('refresh') }}重新筛选</button>
     <button class="btn" type="button" onclick="dmBatch(this)" title="给本页还没有话术的线索各生成一条公开回复 + 私信开场白">{{ icon('send') }}<span>批量生成话术</span></button>
     <a class="btn" href="/leads.csv{{ qs(page=None, sort=None) }}">{{ icon('download') }}导出当前筛选</a>
   </div>

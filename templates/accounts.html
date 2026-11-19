@@ -23,7 +23,7 @@
   <div class="metric">
     <div class="metric-label"><span>追踪费用</span><span class="code">COST</span></div>
     <div class="metric-num">{{ '0' if me.is_admin else pts(price) }}</div>
-    <div class="metric-sub">{{ '管理员免费' if me.is_admin else '积分 / 每次刷新 · 每 12 小时约每月 ' ~ pts(price * 60) ~ ' 积分' }}</div>
+    <div class="metric-sub">{{ '管理员免费' if me.is_admin else '条额度 / 每次刷新 · 每 12 小时约每月 ' ~ pts(price * 60) ~ ' 条' }}</div>
   </div>
 </section>
 
@@ -103,7 +103,7 @@
         <span class="cell-sub">{{ '上次 ' ~ ago(a.last_checked) if a.last_checked else '' }}{% if a.active and a.next_check %} · 下次 {{ ago(a.next_check) }}{% endif %}</span>
       </td>
       <td class="r nw td-act">
-        <button class="btn-sm" data-refresh="{{ a.id }}" title="立即刷新{{ '' if me.is_admin else '（扣 ' ~ pts(price) ~ ' 积分）' }}">{{ icon('refresh') }}刷新</button>
+        <button class="btn-sm" data-refresh="{{ a.id }}" title="立即刷新{{ '' if me.is_admin else '（扣 ' ~ pts(price) ~ ' 条额度）' }}">{{ icon('refresh') }}刷新</button>
         <button class="btn-sm" data-toggle="{{ a.id }}" data-active="{{ a.active }}">{{ icon('pause' if a.active else 'resume') }}{{ '暂停' if a.active else '恢复' }}</button>
         <button class="btn-sm danger" data-delete="{{ a.id }}" data-name="{{ a.nickname or a.account_id }}" aria-label="删除">{{ icon('trash') }}</button>
       </td>

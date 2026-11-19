@@ -24,11 +24,12 @@ DEFAULT_SETTINGS = {
     "intent_exclude": "\n".join([
         "私信我", "加我", "找我", "滴滴我", "厂家直销", "我们公司", "招代理", "诚招",
     ]),
-    # 计费：1 积分 = 1 元。每个作品按实际抓到的评论数，每 50 条为一档收费。
-    "price_post": "0.3",
-    "price_post_wechat": "1.0",
-    # 对标账号：每刷新一次（自动或手动）扣的积分
-    "price_track": "0.1",
+    # 计费：额度的单位就是「条评论」，采集时按新抓到的评论条数扣。微信类（视频号 / 公众号）每条按下面的倍数扣
+    "wechat_weight": "2",
+    # 对标账号：每刷新一次（自动或手动）扣多少条额度
+    "price_track": "20",
+    # 自定义金额充值时，1 元 = 多少条评论额度
+    "comments_per_yuan": "100",
     # AI 仿写用的是客户自己的阿里云 Key（填在各自的「我的账户」里），这里只放默认模型名。
     "ai_text_model": "qwen-plus",
     "ai_image_model": "qwen-image-2.0",
@@ -36,8 +37,8 @@ DEFAULT_SETTINGS = {
     # open = 注册即可用；approval = 注册后需管理员审核；closed = 关闭注册
     "register_mode": "approval",
     "register_bonus": "0",
-    # 充值套餐：每行「付款金额 赠送积分」，用户在充值页选择；收款码图片存在 media/pay-*.png|jpg
-    "recharge_packages": "50 0\n200 20\n500 80\n1000 200",
+    # 充值套餐：每行「付款金额（元） 到账评论条数」，用户在充值页选择；收款码图片存在 media/pay-*.png|jpg
+    "recharge_packages": "45 5000\n160 20000\n700 100000",
     "recharge_contact": "",   # 联系方式（微信号等），显示在充值页
     "recharge_note": "",      # 充值页补充说明
 }

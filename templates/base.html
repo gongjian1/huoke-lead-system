@@ -40,7 +40,7 @@
       {% if me.is_admin %}
       <div class="readout">{{ icon('wallet') }}<span>API 余额</span><b id="balance">—</b></div>
       {% else %}
-      <a class="readout points-link" href="/recharge" title="去充值">{{ icon('coin') }}<span>积分余额</span><b id="points">{{ pts(me.balance) }}</b></a>
+      <a class="readout points-link" href="/recharge" title="去充值">{{ icon('coin') }}<span>评论额度</span><b id="points">{{ pts(me.balance) }}</b></a>
       {% endif %}
       <div class="who">
         <span class="who-name">{{ me.nickname or me.phone }}</span>
