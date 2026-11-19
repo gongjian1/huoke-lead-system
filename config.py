@@ -8,6 +8,8 @@ TIKHUB_BASE = os.environ.get("TIKHUB_BASE", "https://api.tikhub.io").rstrip("/")
 DEFAULT_SETTINGS = {
     # 数据接口 Key 不随源码提供：用环境变量 TIKHUB_API_KEY 首次写入，或登录后在「管理后台 → 设置」里填写
     "api_key": os.environ.get("TIKHUB_API_KEY", ""),
+    # 接口地址：留空 = 直连 TikHub；拿到的是中转子 Key（hk_ 开头）时，填提供者给你的网关地址
+    "api_base": "",
     "intent_strong": "\n".join([
         "想了解", "了解一下", "怎么联系", "联系方式", "怎么合作", "想合作", "求合作",
         "想加盟", "怎么加盟", "加盟费", "想投资", "怎么投资", "想做", "我也想",

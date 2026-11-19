@@ -1241,6 +1241,12 @@ def admin_settings():
         key = request.form.get("api_key", "").strip()
         if key and "•" not in key:
             set_setting("api_key", key)
+        base = request.form.get("api_base", "").strip().rstrip("/")
+        if re.fullmatch(r"https://[A-Za-z0-9.\-]+(:\d{2,5})?(/[A-Za-z0-9._\-/]*)?", base) or \
+                re.fullmatch(r"http://(localhost|127\.0\.0\.1)(:\d{2,5})?(/[A-Za-z0-9._\-/]*)?", base) or not base:
+            set_setting("api_base", base)
+        else:
+            flash("接口地址格式不对，需要以 https:// 开头，没有修改", "err")
         errors = []
         for k in ("ai_text_model", "ai_image_model", "ai_video_model"):
             v = request.form.get(k, "").strip()
@@ -1260,7 +1266,7 @@ def admin_settings():
         return redirect(url_for("admin_settings"))
     key = get_setting("api_key")
     masked = (key[:6] + "•" * 10 + key[-4:]) if len(key) > 12 else ""
-    return render_template("admin_settings.html", masked_key=masked,
+    return render_template("admin_settings.html", masked_key=masked, api_base=get_setting("api_base"),
                            ai_text_model=get_setting("ai_text_model"), ai_image_model=get_setting("ai_image_model"),
                            ai_video_model=get_setting("ai_video_model"),
                            strong=get_setting("intent_strong"), medium=get_setting("intent_medium"),

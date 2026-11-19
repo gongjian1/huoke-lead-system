@@ -18,8 +18,8 @@ apt-get install -y -qq python3 python3-venv python3-pip nginx certbot python3-ce
 echo "[2/6] 复制代码到 $APP_DIR（不会复制任何 .db 数据库）"
 mkdir -p "$APP_DIR"
 cp "$SRC"/*.py "$SRC/requirements.txt" "$APP_DIR/"
-rm -rf "$APP_DIR/templates" "$APP_DIR/static"
-cp -r "$SRC/templates" "$SRC/static" "$APP_DIR/"
+rm -rf "$APP_DIR/templates" "$APP_DIR/static" "$APP_DIR/gateway/__pycache__"
+cp -r "$SRC/templates" "$SRC/static" "$SRC/gateway" "$APP_DIR/"
 
 echo "[3/6] 创建 Python 虚拟环境"
 python3 -m venv "$APP_DIR/venv"

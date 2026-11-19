@@ -19,7 +19,7 @@ def request(method, path, params=None, body=None, retries=3, timeout=45):
     key = (get_setting("api_key") or "").strip()
     if not key:
         raise ApiError("还没有配置数据接口 Key：请管理员在「管理后台 → 设置」里填写（获取方式见 README）")
-    url = TIKHUB_BASE + path
+    url = ((get_setting("api_base") or "").strip().rstrip("/") or TIKHUB_BASE) + path
     if params:
         url += "?" + urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
     data = json.dumps(body).encode() if body is not None else None

@@ -88,10 +88,12 @@
   <p class="panel-note">意向词对所有用户生效：评论里出现这些词就会被筛成线索，一行一个。</p>
 
   <section class="panel">
-    <div class="panel-head"><div class="panel-title">{{ icon('key') }}TikHub API Key <span class="code">API</span></div></div>
+    <div class="panel-head"><div class="panel-title">{{ icon('key') }}数据接口 Key <span class="code">API</span></div></div>
     <div class="panel-body">
-      <p class="panel-note">当前 <span class="mono">{{ masked_key or '未设置' }}</span> · 要换就填新的，不换留空。</p>
+      <p class="panel-note">当前 <span class="mono">{{ masked_key or '未设置' }}</span> · 要换就填新的，不换留空。直接用 TikHub 的 Key，或者填提供者发给你的子 Key（<span class="mono">hk_</span> 开头）都可以。</p>
       <input type="text" name="api_key" class="mono" placeholder="粘贴新的 API Key" autocomplete="off" aria-label="API Key">
+      <p class="panel-note" style="margin-top:14px">接口地址 · 用的是子 Key 时，填提供者给你的网关地址；直接用 TikHub 的 Key 就留空。</p>
+      <input type="text" name="api_base" class="mono" value="{{ api_base }}" placeholder="留空 = 直连 TikHub，例如 https://gw.example.com" autocomplete="off" aria-label="接口地址">
     </div>
   </section>
 
