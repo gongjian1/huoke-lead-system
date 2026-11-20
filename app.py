@@ -912,6 +912,46 @@ def account_page():
     return render_template("account.html", ledger=ledger, usage=usage, prices=_prices(), ai_info=_ai_info())
 
 
+MAX_INTENT_WORDS, MAX_WORD_LEN = 300, 30
+
+
+def _clean_words(text):
+    words = [w for w in word_list(text) if len(w) <= MAX_WORD_LEN]
+    return words[:MAX_INTENT_WORDS]
+
+
+@app.route("/intent", methods=["GET", "POST"])
+def intent_page():
+    """每个客户自己的意向词。没设置过就用系统默认（管理员在「系统设置」里维护的那份）。"""
+    if g.user["is_admin"]:
+        return redirect(url_for("admin_settings"))     # 管理员改的就是系统默认
+    uid = g.user["id"]
+    if request.method == "POST":
+        conn = get_db()
+        if request.form.get("action") == "reset":
+            conn.execute("UPDATE users SET intent_strong=NULL, intent_medium=NULL, intent_exclude=NULL WHERE id=?", (uid,))
+            flash("已恢复成系统默认意向词", "ok")
+        else:
+            lists = {k: _clean_words(request.form.get(k, "")) for k in ("intent_strong", "intent_medium", "intent_exclude")}
+            if not lists["intent_strong"] and not lists["intent_medium"]:
+                flash("A 级和 B 级至少要有一个词，不然什么评论都不会被筛成线索，没有保存", "err")
+            else:
+                conn.execute("UPDATE users SET intent_strong=?, intent_medium=?, intent_exclude=? WHERE id=?",
+                             ("\n".join(lists["intent_strong"]), "\n".join(lists["intent_medium"]),
+                              "\n".join(lists["intent_exclude"]), uid))
+                flash("已保存。以后的采集按你的意向词筛；已经采到的评论，到「线索」页点「重新筛选」就会按新词再筛一遍", "ok")
+        conn.commit()
+        conn.close()
+        return redirect(url_for("intent_page"))
+    conn = get_db()
+    row = conn.execute("SELECT intent_strong, intent_medium, intent_exclude FROM users WHERE id=?", (uid,)).fetchone()
+    conn.close()
+    custom = row["intent_strong"] is not None or row["intent_medium"] is not None or row["intent_exclude"] is not None
+    pick = lambda k: row[k] if row[k] is not None else get_setting(k)
+    return render_template("intent.html", custom=custom, strong=pick("intent_strong"), medium=pick("intent_medium"),
+                           exclude=pick("intent_exclude"), MAX_WORDS=MAX_INTENT_WORDS)
+
+
 MAX_ACCOUNTS = 50
 FEED_SORTS = {"latest": "p.published_at DESC", "rising": "(COALESCE(p.d_likes,0) + COALESCE(p.d_comments,0) * 3) DESC, p.published_at DESC",
               "comments": "COALESCE(p.comments, 0) DESC, COALESCE(p.likes, p.plays, 0) DESC"}

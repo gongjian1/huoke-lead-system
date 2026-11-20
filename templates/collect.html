@@ -101,7 +101,7 @@
             <label>每个作品最多抓几条评论<input type="number" id="commentsPer" value="100" min="10" max="500" step="10"></label>
             <label>作品至少有几条评论才抓<input type="number" id="minComments" value="3" min="0"></label>
           </div>
-          <label class="field-label" for="extraIntent">本次额外意向词 <small>只对这次任务生效，比如行业专属的词</small></label>
+          <label class="field-label" for="extraIntent">本次额外意向词 <small>只对这次任务生效；长期用的词请到{% if me.is_admin %}「系统设置」{% else %}<a href="/intent" style="color:var(--lime)">「我的意向词」</a>{% endif %}设置</small></label>
           <textarea id="extraIntent" rows="2" placeholder="例如：想装、有场地、物业"></textarea>
         </div>
       </details>

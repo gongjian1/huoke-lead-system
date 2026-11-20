@@ -44,11 +44,19 @@ def platform_health():
     return out
 
 
-def intent_words(extra=""):
-    strong = word_list(get_setting("intent_strong")) + word_list(extra)
-    medium = word_list(get_setting("intent_medium"))
-    exclude = word_list(get_setting("intent_exclude"))
-    return strong, medium, exclude
+def intent_words(extra="", owner=None):
+    """A 级 / B 级 / 排除词。用户在「我的意向词」里设置过就用他自己的，没设置就用系统默认（管理员后台里那份）。"""
+    own = None
+    if owner:
+        conn = get_db()
+        own = conn.execute("SELECT intent_strong, intent_medium, intent_exclude FROM users WHERE id=?", (owner,)).fetchone()
+        conn.close()
+
+    def pick(key):
+        v = own[key] if own is not None else None
+        return word_list(v if v is not None else get_setting(key))
+
+    return pick("intent_strong") + word_list(extra), pick("intent_medium"), pick("intent_exclude")
 
 
 def score(text, words):
@@ -260,7 +268,7 @@ def run_task(tid):
             _update(conn, tid, status="已停止", finished_at=time.strftime("%Y-%m-%d %H:%M:%S"))
             return
         _update(conn, tid, status="进行中", balance_before=api.balance())
-        words = intent_words(t["extra_intent"])
+        words = intent_words(t["extra_intent"], owner=t["owner_id"])
         project = t["project"] or "默认"
         billed = not conn.execute("SELECT is_admin FROM users WHERE id=?", (t["owner_id"],)).fetchone()[0]
         status = "已完成"
@@ -332,7 +340,7 @@ def start_task(**fields):
 def rescore_all(owner):
     """Apply the current intent words to this user's stored comments that are not yet leads.
     Each comment follows the region setting of the task it came from."""
-    words = intent_words()
+    words = intent_words(owner=owner)
     conn = get_db()
     rows = conn.execute("""
         SELECT c.*, v.keyword, v.project, t.regions AS t_regions, t.keep_unknown_region AS t_keep

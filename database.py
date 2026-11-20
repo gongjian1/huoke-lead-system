@@ -331,7 +331,8 @@ def _migrate_v2(conn):
 
 LATER_COLUMNS = {
     "users": {"ai_api_key": "TEXT DEFAULT ''", "ai_region": "TEXT DEFAULT 'cn'", "ai_text_model": "TEXT DEFAULT ''",
-              "ai_image_model": "TEXT DEFAULT ''", "product_info": "TEXT DEFAULT ''"},
+              "ai_image_model": "TEXT DEFAULT ''", "product_info": "TEXT DEFAULT ''",
+              "intent_strong": "TEXT", "intent_medium": "TEXT", "intent_exclude": "TEXT"},   # NULL = 用系统默认意向词
     "tasks": {"fetch_replies": "INTEGER DEFAULT 1", "platform_log": "TEXT",
               "max_age_days": "INTEGER DEFAULT 0", "regions": "TEXT DEFAULT ''", "keep_unknown_region": "INTEGER DEFAULT 1",
               "skip_seen": "INTEGER DEFAULT 1"},
